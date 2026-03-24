@@ -1,0 +1,25 @@
+{
+  "name": "ai-difficulty-tuner",
+  "version": "1.0.0",
+  "description": "AI难度动态调优技能 - 调整AI对手难度以匹配玩家水平",
+  "main": "src/index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "jest"
+  },
+  "keywords": [
+    "boardgame",
+    "ai",
+    "difficulty",
+    "elo",
+    "adaptive"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
