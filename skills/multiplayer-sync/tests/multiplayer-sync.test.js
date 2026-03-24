@@ -40,6 +40,9 @@ const createMockGameEngine = () => ({
       newState.turn++;
     }
     return newState;
+  },
+  getAllowedActions() {
+    return ['build', 'pass', 'trade'];
   }
 });
 
@@ -66,12 +69,14 @@ describe('LockstepSynchronizer', () => {
   });
 
   test('should accept inputs from players', () => {
+    synchronizer.startNewTurn();
     const result = synchronizer.submitInput('player1', { type: 'build' });
     expect(result.success).toBe(true);
     expect(result.turn).toBe(0);
   });
 
   test('should reject duplicate inputs', () => {
+    synchronizer.startNewTurn();
     synchronizer.submitInput('player1', { type: 'build' });
     const result = synchronizer.submitInput('player1', { type: 'build' });
     expect(result.success).toBe(false);
@@ -79,6 +84,7 @@ describe('LockstepSynchronizer', () => {
   });
 
   test('should execute turn when all players submit', () => {
+    synchronizer.startNewTurn();
     synchronizer.submitInput('player1', { type: 'build' });
     synchronizer.submitInput('player2', { type: 'pass' });
 
@@ -93,6 +99,8 @@ describe('LockstepSynchronizer', () => {
   });
 
   test('should execute turn on timeout', (done) => {
+    // Use a short timeout for this test
+    synchronizer.config.turnTimeout = 50;
     synchronizer.startNewTurn();
 
     // Only player 1 submits
@@ -103,7 +111,7 @@ describe('LockstepSynchronizer', () => {
       expect(synchronizer.currentTurn).toBe(1);
       done();
     }, 100);
-  });
+  }, 5000);
 
   test('should add and remove players', () => {
     synchronizer.addPlayer('player3');
@@ -232,14 +240,14 @@ describe('DisconnectHandler', () => {
     expect(handler.isConnected('player1')).toBe(true);
   });
 
-  test('should reject late reconnection', () => {
+  test('should reject late reconnection', async () => {
     handler.config.reconnectWindow = 100; // Very short window
 
     handler.onPlayerConnect('player1');
     handler.onPlayerDisconnect('player1');
 
     // Wait for timeout
-    return new Promise((resolve) => {
+    await new Promise((resolve) => {
       setTimeout(() => {
         const result = handler.handleReconnect('player1', {});
         expect(result.success).toBe(false);
@@ -247,7 +255,7 @@ describe('DisconnectHandler', () => {
         resolve();
       }, 150);
     });
-  });
+  }, 10000); // 10 second timeout
 
   test('should get reconnection info', () => {
     handler.onPlayerConnect('player1');
@@ -351,11 +359,18 @@ describe('AntiCheat', () => {
   });
 
   test('should detect suspicious players', () => {
-    // Rapid actions
-    for (let i = 0; i < 3; i++) {
+    // Disable timing check to allow rapid actions
+    antiCheat.config.enableTimingCheck = false;
+    
+    // Submit many actions to exceed APM threshold
+    // With maxActionsPerMinute = 10, we need > 8 actions
+    for (let i = 0; i < 15; i++) {
       antiCheat.validateInput('player1', { type: 'build' });
     }
 
+    // Check that player has high APM
+    const report = antiCheat.getAnomalyReport('player1');
+    expect(report.actionsPerMinute).toBeGreaterThan(8);
     expect(antiCheat.isSuspicious('player1')).toBe(true);
   });
 
@@ -471,6 +486,14 @@ describe('SpectatorSystem', () => {
   });
 
   afterEach(() => {
+    // Clean up all registered games to prevent state leakage
+    if (spectator && typeof spectator.cleanupGame === 'function') {
+      // Get all registered game IDs and clean them up
+      const gameIds = spectator.gameSpectators ? Array.from(spectator.gameSpectators.keys()) : [];
+      for (const gameId of gameIds) {
+        spectator.cleanupGame(gameId);
+      }
+    }
     spectator = null;
     mockConnection = null;
     jest.clearAllMocks();

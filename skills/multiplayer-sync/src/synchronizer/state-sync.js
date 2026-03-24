@@ -152,12 +152,21 @@ class StateSynchronizer {
       }
     } else {
       // Track all fields
-      changes.resources = this._computeChanges(
+      const resourceChanges = this._computeChanges(
         oldState.resources,
         newState.resources
       );
-      changes.turn = newState.turn;
-      changes.phase = newState.phase;
+      if (Object.keys(resourceChanges).length > 0) {
+        changes.resources = resourceChanges;
+      }
+      
+      if (oldState.turn !== newState.turn) {
+        changes.turn = newState.turn;
+      }
+      
+      if (oldState.phase !== newState.phase) {
+        changes.phase = newState.phase;
+      }
 
       // Add other top-level changes
       for (const key of Object.keys(newState)) {

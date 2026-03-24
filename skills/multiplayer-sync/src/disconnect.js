@@ -211,6 +211,15 @@ class DisconnectHandler {
     const reconnectInfo = this.reconnectInfos.get(playerId);
 
     if (!reconnectInfo) {
+      // Check if player was permanently disconnected (timeout already fired)
+      const state = this.connectionStates.get(playerId);
+      if (state === ConnectionState.REPLACED) {
+        return {
+          success: false,
+          reason: 'reconnect_window_expired'
+        };
+      }
+      
       // No pending reconnect - new connection
       this.onPlayerConnect(playerId, connection);
       return null;
@@ -289,7 +298,9 @@ class DisconnectHandler {
    * @returns {boolean}
    */
   isConnected(playerId) {
-    return this.connectionStates.get(playerId) === ConnectionState.CONNECTED;
+    const state = this.connectionStates.get(playerId);
+    return state === ConnectionState.CONNECTED || 
+           state === ConnectionState.RECONNECTED;
   }
 
   /**
