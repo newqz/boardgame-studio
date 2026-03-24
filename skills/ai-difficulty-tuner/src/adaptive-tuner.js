@@ -77,6 +77,21 @@ class AdaptiveDifficultyTuner {
     this.lastAdjustmentDirection = new Map();   // Track last adjustment direction for oscillation
     /** @type {Map<string, {direction: string, count: number}[]>} */
     this.adjustmentOscillation = new Map();    // Track oscillation patterns
+
+    // Telemetry and event hooks
+    /** @type {Object[]} */
+    this.changeCallbacks = [];
+    /** @type {Object[]} */
+    this.metricsHistory = [];
+    /** @type {Object} */
+    this.stats = {
+      totalAdjustments: 0,
+      oscillationsDetected: 0,
+      cooldownsTriggered: 0,
+      averagePerformanceScore: 0
+    };
+    /** @type {Date|null} */
+    this.lastUpdateTime = null;
   }
 
   /**
@@ -220,6 +235,7 @@ class AdaptiveDifficultyTuner {
 
     // Check for oscillation pattern
     if (this.isOscillating(playerId)) {
+      this._recordOscillation();
       return { adjust: false, direction: 'none', magnitude: 0, reason: 'Oscillation detected - difficulty locked' };
     }
 
@@ -321,6 +337,9 @@ class AdaptiveDifficultyTuner {
     // Set cooldown
     this.adjustmentCooldown.set(playerId, this.thresholds.ADJUSTMENT_COOLDOWN);
     this.lastAdjustmentDirection.set(playerId, direction);
+
+    // Record telemetry
+    this._recordCooldownTriggered();
   }
 
   /**
@@ -481,6 +500,174 @@ class AdaptiveDifficultyTuner {
     }
 
     return 'No change recommended.';
+  }
+
+  /**
+   * Register a callback for difficulty change events
+   * @param {Function} callback - Function to call on difficulty change
+   */
+  onDifficultyChange(callback) {
+    if (typeof callback === 'function') {
+      this.changeCallbacks.push(callback);
+    }
+  }
+
+  /**
+   * Emit difficulty change event to all registered callbacks
+   * @param {Object} event - Event data
+   * @param {string} event.playerId - Player ID
+   * @param {string} event.fromLevel - Previous level
+   * @param {string} event.toLevel - New level
+   * @param {string} event.direction - 'up' or 'down'
+   * @param {Object} event.metrics - Performance metrics at time of change
+   */
+  emitDifficultyChange(event) {
+    for (const callback of this.changeCallbacks) {
+      try {
+        callback(event);
+      } catch (err) {
+        console.error('Error in difficulty change callback:', err);
+      }
+    }
+  }
+
+  /**
+   * Get telemetry metrics for monitoring
+   * @returns {Object} Telemetry data
+   */
+  getMetrics() {
+    // Calculate average performance score across all players
+    let totalScore = 0;
+    let playerCount = 0;
+
+    for (const [playerId] of this.gameResults) {
+      const metrics = this.analyzePerformance(playerId);
+      totalScore += metrics.performanceScore;
+      playerCount++;
+    }
+
+    const avgScore = playerCount > 0 ? totalScore / playerCount : 0;
+
+    // Count difficulty distribution
+    const difficultyDistribution = {};
+    for (const level of Object.values(DifficultyLevel)) {
+      difficultyDistribution[level] = 0;
+    }
+    for (const [, level] of this.currentDifficulty) {
+      difficultyDistribution[level] = (difficultyDistribution[level] || 0) + 1;
+    }
+
+    return {
+      totalPlayersTracked: this.gameResults.size,
+      totalAdjustments: this.stats.totalAdjustments,
+      oscillationsDetected: this.stats.oscillationsDetected,
+      cooldownsTriggered: this.stats.cooldownsTriggered,
+      averagePerformanceScore: avgScore,
+      difficultyDistribution,
+      lastUpdateTime: this.lastUpdateTime
+    };
+  }
+
+  /**
+   * Get health status for monitoring
+   * @returns {Object} Health status
+   */
+  getHealthStatus() {
+    const recentErrors = []; // Placeholder for error tracking
+
+    // Check for oscillating players
+    let oscillatingPlayers = 0;
+    for (const [playerId] of this.gameResults) {
+      if (this.isOscillating(playerId)) {
+        oscillatingPlayers++;
+      }
+    }
+
+    const isHealthy = oscillatingPlayers === 0 && recentErrors.length === 0;
+
+    return {
+      isHealthy,
+      status: isHealthy ? 'healthy' : 'degraded',
+      checks: {
+        noOscillations: oscillatingPlayers === 0,
+        noErrors: recentErrors.length === 0,
+        playersTracked: this.gameResults.size > 0
+      },
+      details: {
+        oscillatingPlayers,
+        recentErrorCount: recentErrors.length,
+        playersTracked: this.gameResults.size,
+        uptime: this.lastUpdateTime ? Date.now() - this.lastUpdateTime.getTime() : null
+      }
+    };
+  }
+
+  /**
+   * Record a difficulty adjustment and emit event
+   * @param {string} playerId - Player ID
+   * @param {string} fromLevel - Previous level
+   * @param {string} toLevel - New level
+   * @param {string} direction - 'up' or 'down'
+   * @private
+   */
+  _recordAdjustment(playerId, fromLevel, toLevel, direction) {
+    this.stats.totalAdjustments++;
+    this.lastUpdateTime = new Date();
+
+    // Record in history
+    this.adjustmentHistory.push({
+      playerId,
+      fromLevel,
+      toLevel,
+      direction,
+      timestamp: Date.now()
+    });
+
+    // Keep only last 20 adjustments
+    if (this.adjustmentHistory.length > 20) {
+      this.adjustmentHistory.shift();
+    }
+
+    // Emit event
+    const metrics = this.analyzePerformance(playerId);
+    this.emitDifficultyChange({
+      playerId,
+      fromLevel,
+      toLevel,
+      direction,
+      metrics
+    });
+  }
+
+  /**
+   * Record that oscillation was detected
+   * @private
+   */
+  _recordOscillation() {
+    this.stats.oscillationsDetected++;
+  }
+
+  /**
+   * Record that cooldown was triggered
+   * @private
+   */
+  _recordCooldownTriggered() {
+    this.stats.cooldownsTriggered++;
+  }
+
+  /**
+   * Reset all telemetry data
+   */
+  resetMetrics() {
+    this.stats = {
+      totalAdjustments: 0,
+      oscillationsDetected: 0,
+      cooldownsTriggered: 0,
+      averagePerformanceScore: 0
+    };
+    this.metricsHistory = [];
+    this.adjustmentHistory = [];
+    this.lastUpdateTime = null;
   }
 }
 

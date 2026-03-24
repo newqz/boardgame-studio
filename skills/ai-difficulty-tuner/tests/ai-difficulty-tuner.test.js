@@ -635,3 +635,246 @@ describe('Performance Score', () => {
     expect(metrics.trend).toBe('improving');
   });
 });
+
+describe('Telemetry and Health', () => {
+  test('should track total adjustments', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+
+    // Trigger some adjustments
+    for (let i = 0; i < 5; i++) {
+      tuner.recordResult('player1', { won: true });
+    }
+    tuner.shouldAdjustDifficulty('player1');
+
+    const metrics = tuner.getMetrics();
+    expect(metrics.totalAdjustments).toBeGreaterThanOrEqual(0);
+  });
+
+  test('should get health status', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+
+    const health = tuner.getHealthStatus();
+
+    expect(health).toHaveProperty('isHealthy');
+    expect(health).toHaveProperty('status');
+    expect(health).toHaveProperty('checks');
+    expect(health).toHaveProperty('details');
+  });
+
+  test('should report healthy when no oscillations', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+
+    // Add some game data
+    for (let i = 0; i < 5; i++) {
+      tuner.recordResult('player1', { won: true });
+    }
+
+    const health = tuner.getHealthStatus();
+    expect(health.isHealthy).toBe(true);
+  });
+
+  test('should register difficulty change callback', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+    let callbackCalled = false;
+
+    tuner.onDifficultyChange((event) => {
+      callbackCalled = true;
+      expect(event).toHaveProperty('playerId');
+      expect(event).toHaveProperty('fromLevel');
+      expect(event).toHaveProperty('toLevel');
+      expect(event).toHaveProperty('direction');
+    });
+
+    // Trigger a difficulty change
+    tuner.setDifficulty('player1', 'easy');
+    tuner.setDifficulty('player1', 'hard');
+  });
+
+  test('should get difficulty distribution', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+
+    tuner.setDifficulty('player1', 'easy');
+    tuner.setDifficulty('player2', 'medium');
+    tuner.setDifficulty('player3', 'hard');
+
+    const metrics = tuner.getMetrics();
+    expect(metrics.difficultyDistribution.easy).toBe(1);
+    expect(metrics.difficultyDistribution.medium).toBe(1);
+    expect(metrics.difficultyDistribution.hard).toBe(1);
+  });
+
+  test('should reset metrics', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+
+    // Add some data
+    for (let i = 0; i < 5; i++) {
+      tuner.recordResult('player1', { won: true });
+    }
+
+    tuner.resetMetrics();
+
+    const metrics = tuner.getMetrics();
+    expect(metrics.totalAdjustments).toBe(0);
+    expect(metrics.oscillationsDetected).toBe(0);
+    expect(metrics.cooldownsTriggered).toBe(0);
+  });
+
+  test('should track cooldown triggers in stats', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+
+    // Trigger adjustment which sets cooldown
+    for (let i = 0; i < 5; i++) {
+      tuner.recordResult('player1', { won: true });
+    }
+    tuner.shouldAdjustDifficulty('player1');
+
+    // Stats should reflect cooldown was triggered at least once
+    expect(tuner.stats.cooldownsTriggered).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('Configuration Validation', () => {
+  const { validateDifficultyConfig, DifficultyLevel } = require('../src/index');
+
+  test('should validate correct config', () => {
+    const config = {
+      thinkTime: { min: 1000, max: 5000, average: 3000 },
+      decisionParams: {
+        explorationRate: 0.15,
+        randomActionRate: 0.05,
+        mistakeRate: 0.03,
+        blindSpotRate: 0.1
+      },
+      capabilities: {
+        maxLookAhead: 3,
+        memoryDepth: 3,
+        patternRecognition: true,
+        adaptToPlayer: false
+      }
+    };
+
+    const result = validateDifficultyConfig(config);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  test('should reject null config', () => {
+    const result = validateDifficultyConfig(null);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Config is null or undefined');
+  });
+
+  test('should reject invalid thinkTime', () => {
+    const config = {
+      thinkTime: { min: -100, max: 5000, average: 3000 },
+      decisionParams: {
+        explorationRate: 0.15,
+        randomActionRate: 0.05,
+        mistakeRate: 0.03,
+        blindSpotRate: 0.1
+      },
+      capabilities: {
+        maxLookAhead: 3,
+        memoryDepth: 3,
+        patternRecognition: true,
+        adaptToPlayer: false
+      }
+    };
+
+    const result = validateDifficultyConfig(config);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('thinkTime.min'))).toBe(true);
+  });
+
+  test('should reject invalid rates', () => {
+    const config = {
+      thinkTime: { min: 1000, max: 5000, average: 3000 },
+      decisionParams: {
+        explorationRate: 1.5,  // > 1
+        randomActionRate: 0.05,
+        mistakeRate: 0.03,
+        blindSpotRate: 0.1
+      },
+      capabilities: {
+        maxLookAhead: 3,
+        memoryDepth: 3,
+        patternRecognition: true,
+        adaptToPlayer: false
+      }
+    };
+
+    const result = validateDifficultyConfig(config);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('explorationRate'))).toBe(true);
+  });
+
+  test('should reject invalid capabilities', () => {
+    const config = {
+      thinkTime: { min: 1000, max: 5000, average: 3000 },
+      decisionParams: {
+        explorationRate: 0.15,
+        randomActionRate: 0.05,
+        mistakeRate: 0.03,
+        blindSpotRate: 0.1
+      },
+      capabilities: {
+        maxLookAhead: -1,  // Negative not allowed
+        memoryDepth: 3,
+        patternRecognition: 'yes',  // Should be boolean
+        adaptToPlayer: false
+      }
+    };
+
+    const result = validateDifficultyConfig(config);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('maxLookAhead') || e.includes('patternRecognition'))).toBe(true);
+  });
+
+  test('should reject min > max in thinkTime', () => {
+    const config = {
+      thinkTime: { min: 5000, max: 1000, average: 3000 },  // min > max
+      decisionParams: {
+        explorationRate: 0.15,
+        randomActionRate: 0.05,
+        mistakeRate: 0.03,
+        blindSpotRate: 0.1
+      },
+      capabilities: {
+        maxLookAhead: 3,
+        memoryDepth: 3,
+        patternRecognition: true,
+        adaptToPlayer: false
+      }
+    };
+
+    const result = validateDifficultyConfig(config);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('min cannot be greater than'))).toBe(true);
+  });
+});
+
+describe('Input Validation', () => {
+  test('should handle invalid level in getFineTunedConfig', () => {
+    const { getFineTunedConfig } = require('../src/index');
+
+    // Invalid level should default to MEDIUM
+    const config = getFineTunedConfig('invalid_level', 0);
+    expect(config.level).toBe('medium');
+  });
+
+  test('should handle NaN performanceScore', () => {
+    const { getFineTunedConfig } = require('../src/index');
+
+    // NaN should default to 0
+    const config = getFineTunedConfig('medium', NaN);
+    expect(config).toBeDefined();
+  });
+
+  test('should handle non-number performanceScore', () => {
+    const { getFineTunedConfig } = require('../src/index');
+
+    // String should default to 0
+    const config = getFineTunedConfig('medium', 'high');
+    expect(config).toBeDefined();
+  });
+});

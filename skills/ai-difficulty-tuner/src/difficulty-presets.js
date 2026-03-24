@@ -257,6 +257,18 @@ function interpolateConfigs(configA, configB, factor) {
  * @returns {DifficultyConfig} Fine-tuned config
  */
 function getFineTunedConfig(level, performanceScore) {
+  // Validate level input
+  if (!isValidLevel(level)) {
+    console.warn(`Invalid difficulty level: ${level}, defaulting to MEDIUM`);
+    level = DifficultyLevel.MEDIUM;
+  }
+
+  // Validate performanceScore
+  if (typeof performanceScore !== 'number' || isNaN(performanceScore)) {
+    console.warn(`Invalid performanceScore: ${performanceScore}, defaulting to 0`);
+    performanceScore = 0;
+  }
+
   const baseConfig = getPreset(level);
   const clampedScore = Math.max(-1, Math.min(1, performanceScore));
 
@@ -287,6 +299,70 @@ function getFineTunedConfig(level, performanceScore) {
   return interpolateConfigs(baseConfig, targetConfig, Math.abs(clampedScore));
 }
 
+/**
+ * Validate a difficulty config structure
+ * @param {Object} config - Config to validate
+ * @returns {{valid: boolean, errors: string[]}} Validation result
+ */
+function validateDifficultyConfig(config) {
+  const errors = [];
+
+  if (!config) {
+    return { valid: false, errors: ['Config is null or undefined'] };
+  }
+
+  // Check thinkTime
+  if (!config.thinkTime || typeof config.thinkTime !== 'object') {
+    errors.push('thinkTime is required and must be an object');
+  } else {
+    if (typeof config.thinkTime.min !== 'number' || config.thinkTime.min < 0) {
+      errors.push('thinkTime.min must be a non-negative number');
+    }
+    if (typeof config.thinkTime.max !== 'number' || config.thinkTime.max < 0) {
+      errors.push('thinkTime.max must be a non-negative number');
+    }
+    if (typeof config.thinkTime.average !== 'number' || config.thinkTime.average < 0) {
+      errors.push('thinkTime.average must be a non-negative number');
+    }
+    if (config.thinkTime.min > config.thinkTime.max) {
+      errors.push('thinkTime.min cannot be greater than thinkTime.max');
+    }
+  }
+
+  // Check decisionParams
+  if (!config.decisionParams || typeof config.decisionParams !== 'object') {
+    errors.push('decisionParams is required and must be an object');
+  } else {
+    const rates = ['explorationRate', 'randomActionRate', 'mistakeRate', 'blindSpotRate'];
+    for (const rate of rates) {
+      const val = config.decisionParams[rate];
+      if (typeof val !== 'number' || val < 0 || val > 1) {
+        errors.push(`decisionParams.${rate} must be a number between 0 and 1`);
+      }
+    }
+  }
+
+  // Check capabilities
+  if (!config.capabilities || typeof config.capabilities !== 'object') {
+    errors.push('capabilities is required and must be an object');
+  } else {
+    if (typeof config.capabilities.maxLookAhead !== 'number' || config.capabilities.maxLookAhead < 0) {
+      errors.push('capabilities.maxLookAhead must be a non-negative number');
+    }
+    if (typeof config.capabilities.memoryDepth !== 'number' || config.capabilities.memoryDepth < 0) {
+      errors.push('capabilities.memoryDepth must be a non-negative number');
+    }
+    if (typeof config.capabilities.patternRecognition !== 'boolean') {
+      errors.push('capabilities.patternRecognition must be a boolean');
+    }
+    if (typeof config.capabilities.adaptToPlayer !== 'boolean') {
+      errors.push('capabilities.adaptToPlayer must be a boolean');
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
 module.exports = {
   DifficultyLevel,
   DifficultyRank,
@@ -296,5 +372,6 @@ module.exports = {
   isValidLevel,
   compareLevels,
   interpolateConfigs,
-  getFineTunedConfig
+  getFineTunedConfig,
+  validateDifficultyConfig
 };
