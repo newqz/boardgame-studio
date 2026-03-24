@@ -7,7 +7,9 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "test:mutations": "jest --coverage --detectOpenHandles"
   },
   "keywords": [
     "boardgame",

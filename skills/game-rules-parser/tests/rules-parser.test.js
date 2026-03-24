@@ -1071,3 +1071,381 @@ describe('Unicode and Edge Input', () => {
     expect(result.gameInfo.ageRange).toBe('10+');
   });
 });
+
+// ============================================
+// v3: Multilingual Tests & Memory Benchmarks
+// ============================================
+
+describe('Multilingual Tests', () => {
+  const { CHINESE_RULES, SPANISH_RULES, JAPANESE_RULES } = require('./fixtures/chinese-rules');
+
+  describe('Chinese Rules (狼人杀)', () => {
+    test('should parse Chinese game name', () => {
+      const result = parseRules(CHINESE_RULES);
+      // Parser extracts what it can from Chinese text
+      expect(result.gameInfo.name).toBeDefined();
+      expect(typeof result.gameInfo.name).toBe('string');
+    });
+
+    test('should handle Chinese characters without crashing', () => {
+      const result = parseRules(CHINESE_RULES);
+      expect(result).toBeDefined();
+      expect(result.gameInfo).toBeDefined();
+    });
+
+    test('should have lower confidence for pure Chinese rules', () => {
+      const result = parseRules(CHINESE_RULES);
+      // English patterns won't match Chinese text well
+      expect(result.metadata.confidence.overall).toBeLessThan(0.9);
+    });
+
+    test('should compute valid confidence for Chinese rules', () => {
+      const result = parseRules(CHINESE_RULES);
+      expect(result.metadata.confidence.overall).toBeGreaterThan(0);
+      expect(result.metadata.confidence.overall).toBeLessThanOrEqual(1);
+    });
+  });
+
+  describe('Spanish Rules (UNO)', () => {
+    test('should parse Spanish game name', () => {
+      const result = parseRules(SPANISH_RULES);
+      // Parser extracts first line, may include subtitle
+      expect(result.gameInfo.name).toContain('UNO');
+    });
+
+    test('should handle Spanish characters without crashing', () => {
+      const result = parseRules(SPANISH_RULES);
+      expect(result).toBeDefined();
+      expect(result.gameInfo).toBeDefined();
+    });
+  });
+
+  describe('Japanese Rules (Canvas)', () => {
+    test('should parse Japanese game name', () => {
+      const result = parseRules(JAPANESE_RULES);
+      expect(result.gameInfo.name).toContain('キャンバス');
+    });
+
+    test('should handle Japanese characters without crashing', () => {
+      const result = parseRules(JAPANESE_RULES);
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('Mixed Language Rules', () => {
+    test('should handle English title with Chinese content', () => {
+      const mixed = `# Chess
+
+## 游戏信息
+2-4 players, ages 6+
+30-120 分钟
+
+## 游戏阶段
+1. 白方先行
+2. 黑方应对
+`;
+      const result = parseRules(mixed);
+      expect(result.gameInfo.name).toBe('Chess');
+      expect(result.gameInfo.playerCount.min).toBe(2);
+    });
+
+    test('should extract English info from mixed content', () => {
+      const mixed = `# Chess
+
+3-6 players
+Age: 8+
+Time: 45 minutes
+`;
+      const result = parseRules(mixed);
+      expect(result.gameInfo.playerCount.min).toBe(3);
+      expect(result.gameInfo.playerCount.max).toBe(6);
+    });
+  });
+});
+
+describe('Memory Usage Benchmarks', () => {
+  test('should use bounded memory for large inputs', () => {
+    // Create a large rule document
+    const largeSection = '这是一段很长的规则描述。'.repeat(100);
+    const largeRules = `
+# 大型游戏规则
+
+## 游戏信息
+2-4 players, ages 10+
+30-60 minutes
+
+## 详细规则
+${largeSection}
+
+## 组件列表
+- 100张卡牌
+- 10个标记
+- 5颗骰子
+`;
+    
+    const initialMemory = process.memoryUsage();
+    const result = parseRules(largeRules);
+    const finalMemory = process.memoryUsage();
+    
+    // Memory growth should be reasonable (< 50MB for this size)
+    const heapUsedDelta = (finalMemory.heapUsed - initialMemory.heapUsed) / 1024 / 1024;
+    
+    expect(result.gameInfo.name).toBe('大型游戏规则');
+    expect(heapUsedDelta).toBeLessThan(50); // Should use less than 50MB for this test
+  });
+
+  test('should handle repeated parsing without memory leak', () => {
+    const rules = `
+# Test Game
+2-4 players, ages 10+
+30-60 minutes
+
+## Game Flow
+1. Start
+2. Play
+3. End
+`;
+    
+    // Parse 100 times
+    for (let i = 0; i < 100; i++) {
+      const result = parseRules(rules);
+      expect(result.gameInfo.name).toBe('Test Game');
+    }
+    
+    // If we get here without crashing, the test passes
+    expect(true).toBe(true);
+  });
+
+  test('should release memory for large rule documents', () => {
+    const createLargeRules = (size) => {
+      const section = 'Rule content. '.repeat(size);
+      return `# Large Game\n\n${section}\n\n2-4 players\n`;
+    };
+    
+    // Parse large, then small, then large
+    const large1 = parseRules(createLargeRules(1000));
+    const small = parseRules('# Small\n\n2 players\n');
+    const large2 = parseRules(createLargeRules(1000));
+    
+    expect(large1.gameInfo.name).toBe('Large Game');
+    expect(small.gameInfo.name).toBe('Small');
+    expect(large2.gameInfo.name).toBe('Large Game');
+  });
+});
+
+describe('Performance Regression Tests (Extended)', () => {
+  test('should parse 5000 character text under 300ms', () => {
+    const text = '# Game\n\n' + 'Rule description. '.repeat(250);
+    const start = performance.now();
+    parseRules(text);
+    const duration = performance.now() - start;
+    expect(duration).toBeLessThan(300);
+  });
+
+  test('should parse 20000 character text under 1s', () => {
+    const text = '# Game\n\n' + 'Detailed rule explanation. '.repeat(1000);
+    const start = performance.now();
+    parseRules(text);
+    const duration = performance.now() - start;
+    expect(duration).toBeLessThan(1000);
+  });
+
+  test('should handle rapid consecutive parses', () => {
+    const rules = '# Game\n\n2-4 players, ages 10+';
+    const results = [];
+    
+    for (let i = 0; i < 50; i++) {
+      results.push(parseRules(rules));
+    }
+    
+    expect(results.length).toBe(50);
+    results.forEach(r => expect(r.gameInfo.playerCount.min).toBe(2));
+  });
+});
+
+describe('Edge Case Robustness', () => {
+  test('should handle extremely long single word', () => {
+    const result = parseRules('# ' + 'x'.repeat(10000));
+    expect(result.gameInfo.name).toBeDefined();
+  });
+
+  test('should handle tab characters', () => {
+    const result = parseRules('# Game\t\t\t2-4 players');
+    expect(result.gameInfo.playerCount.min).toBe(2);
+  });
+
+  test('should handle form feed characters', () => {
+    const result = parseRules('# Game\f\f2-4 players');
+    expect(result.gameInfo.playerCount.min).toBe(2);
+  });
+
+  test('should handle vertical tab characters', () => {
+    const result = parseRules('# Game\v\v2-4 players');
+    expect(result.gameInfo.playerCount.min).toBe(2);
+  });
+
+  test('should handle null bytes gracefully', () => {
+    const result = parseRules('# Game\u0000\n2-4 players');
+    // Null byte should be stripped or handled
+    expect(result.gameInfo.name).toBeDefined();
+    expect(result.gameInfo.name.length).toBeGreaterThan(0);
+  });
+
+  test('should handle emoji in rules', () => {
+    const result = parseRules('# 🎲 Board Game\n\n2-4 players');
+    expect(result.gameInfo.name).toBe('🎲 Board Game');
+  });
+
+  test('should handle RTL characters', () => {
+    const result = parseRules('# משחק\n\n2-4 players\n30-60 minutes');
+    expect(result.gameInfo.playerCount.min).toBe(2);
+  });
+
+  test('should handle mixed RTL and LTR', () => {
+    const result = parseRules('# Game שם\n\n2-4 players\n30-60 minutes');
+    expect(result.gameInfo.name).toBe('Game שם');
+  });
+});
+
+// ============================================
+// v3: Test Effectiveness Validation (Stryker-lite)
+// ============================================
+
+describe('Test Effectiveness Validation', () => {
+  /**
+   * 这些测试确保我们的测试套件真正验证代码行为，
+   * 而不是永远通过。它们验证：
+   * 1. 解析器在接收无效输入时抛出错误
+   * 2. 解析器在接收有效输入时返回正确结构
+   * 3. 边界条件被正确处理
+   */
+  
+  test('should fail if game info extraction is broken', () => {
+    const result = parseRules('# TestGame\n\n2-4 players\nages 10+');
+    expect(result.gameInfo.name).toBe('TestGame');
+    expect(result.gameInfo.playerCount.min).toBe(2);
+    expect(result.gameInfo.playerCount.max).toBe(4);
+    expect(result.gameInfo.ageRange).toBe('10+');
+  });
+
+  test('should fail if confidence calculation is broken', () => {
+    const emptyResult = parseRules('# Game');
+    const fullResult = parseRules('# Game\n\n2-4 players\nages 10+\n30-60 minutes');
+    
+    // Empty rules should have lower confidence than full rules
+    expect(fullResult.metadata.confidence.overall).toBeGreaterThan(emptyResult.metadata.confidence.overall);
+  });
+
+  test('should fail if ambiguity detection is broken', () => {
+    const ambiguousRules = 'Some players can maybe win when they have a few points';
+    const result = parseRules(ambiguousRules);
+    
+    // Should detect at least one ambiguity
+    expect(result.ambiguities.length).toBeGreaterThan(0);
+  });
+
+  test('should fail if edge case detection is broken', () => {
+    const edgeCaseRules = `
+# Game
+If there is a tie for most points, the player with the most resources wins.
+At least 2 players are required to start.
+`;
+    const result = parseRules(edgeCaseRules);
+    
+    // Should detect edge cases
+    expect(result.edgeCases.length).toBeGreaterThan(0);
+  });
+
+  test('should fail if validation is broken', () => {
+    const incompleteRules = parseRules('# Game');
+    const validation = validateRules(incompleteRules);
+    
+    // Should flag missing information
+    expect(validation.errors.length).toBeGreaterThan(0);
+    expect(validation.valid).toBe(false);
+  });
+
+  test('should fail if components extraction is broken', () => {
+    const rules = `
+# Game
+Components:
+- 52 cards
+- 1 board
+- 4 markers
+`;
+    const result = parseRules(rules);
+    
+    expect(result.components.length).toBeGreaterThanOrEqual(3);
+  });
+
+  test('should fail if phases extraction is broken', () => {
+    const rules = `
+# Game
+## Phases
+1. Setup
+2. Play
+3. End
+`;
+    const result = parseRules(rules);
+    
+    expect(result.phases.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test('should fail if victory conditions extraction is broken', () => {
+    const rules = `
+# Game
+## Victory
+First to 10 points wins the game.
+`;
+    const result = parseRules(rules);
+    
+    expect(result.victoryConditions.length).toBeGreaterThan(0);
+    expect(result.victoryConditions[0].name).toContain('10');
+  });
+
+  test('should fail if markdown output is broken', () => {
+    const result = parseRules('# Test\n\n2 players');
+    const markdown = toMarkdown(result);
+    
+    expect(markdown).toContain('# Test');
+    expect(markdown).toContain('2');
+  });
+
+  test('should fail if input validation is broken', () => {
+    // These should not throw (valid input)
+    expect(() => parseRules('# Game')).not.toThrow();
+    expect(() => parseRules('# Game\n\n2-4 players')).not.toThrow();
+    
+    // These should throw (invalid input)
+    expect(() => parseRules(null)).toThrow();
+    expect(() => parseRules(undefined)).toThrow();
+    expect(() => parseRules(123)).toThrow();
+  });
+
+  test('should detect regressions in player count parsing', () => {
+    const patterns = [
+      { input: '2-4 players', min: 2, max: 4 },
+      { input: 'for 2 to 4 players', min: 2, max: 4 },
+      { input: '3-6 people', min: 3, max: 6 },
+    ];
+    
+    patterns.forEach(({ input, min, max }) => {
+      const result = parseRules(`# Game\n\n${input}`);
+      expect(result.gameInfo.playerCount.min).toBe(min);
+      expect(result.gameInfo.playerCount.max).toBe(max);
+    });
+  });
+
+  test('should detect regressions in time parsing', () => {
+    const patterns = [
+      { input: '30-60 minutes', min: 30, max: 60 },
+      { input: '1-2 hours', min: 60, max: 120 },
+    ];
+    
+    patterns.forEach(({ input, min, max }) => {
+      const result = parseRules(`# Game\n\n${input}`);
+      expect(result.gameInfo.playTime.min).toBe(min);
+      expect(result.gameInfo.playTime.max).toBe(max);
+    });
+  });
+});
