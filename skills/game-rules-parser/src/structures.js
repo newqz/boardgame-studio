@@ -153,6 +153,18 @@ const AmbiguitySeverity = {
  * @property {number} parseTime - 解析耗时（毫秒）
  * @property {string[]} unparsedSections - 未解析的章节
  * @property {string} version - 解析器版本
+ * @property {ConfidenceScore} [confidence] - 整体置信度
+ */
+
+/**
+ * @typedef {Object} ConfidenceScore
+ * @property {number} overall - 整体置信度 (0-1)
+ * @property {number} gameInfo - 游戏信息置信度
+ * @property {number} components - 组件置信度
+ * @property {number} phases - 阶段置信度
+ * @property {number} actions - 动作置信度
+ * @property {number} victory - 胜利条件置信度
+ * @property {number} ambiguity - 歧义检测置信度
  */
 
 /**
@@ -160,7 +172,17 @@ const AmbiguitySeverity = {
  * @property {string[]} [customTerms] - 自定义术语表
  * @property {boolean} [strictMode] - 严格模式
  * @property {string} [language] - 语言 (default: 'en')
+ * @property {boolean} [computeConfidence] - 计算置信度 (default: true)
  */
+
+
+// Utility function (defined before exports for reference)
+const calculateConfidence = (extraction, expectedFields, actualFields, ambiguityPenalty = 0.1) => {
+  if (expectedFields === 0) return 1;
+  const coverage = Math.min(actualFields / expectedFields, 1);
+  const ambiguityFactor = Math.max(0, 1 - (extraction.ambiguities?.length || 0) * ambiguityPenalty);
+  return Math.round(coverage * ambiguityFactor * 100) / 100;
+};
 
 module.exports = {
   // Enums
@@ -182,6 +204,10 @@ module.exports = {
     Interpretation: {},
     ParsedRule: {},
     ParseMetadata: {},
-    ParserOptions: {}
-  }
+    ParserOptions: {},
+    ConfidenceScore: {}
+  },
+  
+  // Utility
+  calculateConfidence
 };

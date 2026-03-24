@@ -1,6 +1,6 @@
 {
   "name": "game-rules-parser",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "桌游规则解析器 - 将自然语言规则文档转化为结构化数据",
   "main": "src/index.js",
   "directories": {

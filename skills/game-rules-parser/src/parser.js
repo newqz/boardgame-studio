@@ -2,7 +2,7 @@
  * Game Rules Parser - Main Parser
  * Parses natural language game rules into structured data
  * 
- * @version 1.0.0
+ * @version 2.0.0
  */
 
 'use strict';
@@ -13,13 +13,31 @@ const { extractPhases } = require('./extractors/phases');
 const { extractActions } = require('./extractors/actions');
 const { extractVictory } = require('./extractors/victory');
 const { detectAmbiguities, detectEdgeCases } = require('./extractors/ambiguity');
-const { GameCategory } = require('./structures');
+const { GameCategory, calculateConfidence } = require('./structures');
 
 /**
  * @typedef {import('./structures').ParsedRule} ParsedRule
  * @typedef {import('./structures').ParserOptions} ParserOptions
  * @typedef {import('./structures').Ambiguity} Ambiguity
  */
+
+/**
+ * Validate input text
+ * @param {string} text - Input text
+ * @returns {{ valid: boolean, error?: string }}
+ */
+function validateInput(text) {
+  if (text === null || text === undefined) {
+    return { valid: false, error: 'Input text cannot be null or undefined' };
+  }
+  if (typeof text !== 'string') {
+    return { valid: false, error: `Input must be a string, got ${typeof text}` };
+  }
+  if (text.length > 1000000) {
+    return { valid: false, error: 'Input text exceeds maximum length of 1,000,000 characters' };
+  }
+  return { valid: true };
+}
 
 /**
  * Parse game rules into structured format
@@ -50,12 +68,18 @@ function parseRules(text, options = {}) {
   const startTime = Date.now();
   const warnings = [];
   const unparsedSections = [];
+  
+  // Input validation
+  const validation = validateInput(text);
+  if (!validation.valid) {
+    throw new Error(`Invalid input: ${validation.error}`);
+  }
 
   // Preprocess text
   const cleanText = preprocessText(text);
 
   // Extract each component
-  const { gameInfo, remainingText: afterInfo } = extractGameInfo(cleanText, options);
+  const { gameInfo, remainingText: afterInfo, confidence: gameInfoConfidence } = extractGameInfo(cleanText, options);
   
   const { components, remainingText: afterComponents } = extractComponents(afterInfo, options);
   
@@ -75,6 +99,51 @@ function parseRules(text, options = {}) {
   // Check for unparsed sections
   if (afterVictory.length > 500) {
     unparsedSections.push('Remaining text may contain unprocessed rules');
+  }
+
+  // Calculate confidence scores
+  const computeConfidence = options.computeConfidence !== false;
+  let confidence = null;
+  
+  if (computeConfidence) {
+    const blockingAmbiguities = ambiguities.filter(a => a.severity === 'blocking').length;
+    const warningAmbiguities = ambiguities.filter(a => a.severity === 'warning').length;
+    
+    // Use dynamic confidence from extractors
+    const gameInfoScore = gameInfoConfidence?.overall || calculateGameInfoConfidence(gameInfo);
+    
+    // Components confidence: based on count with quality weighting
+    const componentsScore = Math.min(components.length / 5, 1) * 0.8;
+    
+    // Phases confidence: based on count
+    const phasesScore = Math.min(phases.length / 4, 1) * 0.8;
+    
+    // Actions confidence: based on count
+    const actionsScore = Math.min(actions.length / 3, 1) * 0.7;
+    
+    // Victory confidence: based on extraction success
+    const victoryScore = victoryConditions.length > 0 ? 0.9 : 0.3;
+    
+    // Ambiguity detection confidence: based on ambiguity count
+    const ambiguityScore = blockingAmbiguities > 0 ? 0.3 : 
+                          warningAmbiguities > 0 ? 0.7 : 0.9;
+    
+    confidence = {
+      overall: Math.round(((gameInfoScore + componentsScore + phasesScore + actionsScore + victoryScore + ambiguityScore) / 6) * 100) / 100,
+      gameInfo: Math.round((gameInfoConfidence?.overall || gameInfoScore) * 100) / 100,
+      components: Math.round(componentsScore * 100) / 100,
+      phases: Math.round(phasesScore * 100) / 100,
+      actions: Math.round(actionsScore * 100) / 100,
+      victory: Math.round(victoryScore * 100) / 100,
+      ambiguity: Math.round(ambiguityScore * 100) / 100,
+      details: {
+        name: gameInfoConfidence?.name || 0,
+        playerCount: gameInfoConfidence?.playerCount || 0,
+        ageRange: gameInfoConfidence?.ageRange || 0,
+        playTime: gameInfoConfidence?.playTime || 0,
+        category: gameInfoConfidence?.category || 0
+      }
+    };
   }
 
   // Generate warnings
@@ -108,9 +177,56 @@ function parseRules(text, options = {}) {
       rawTextLength: text.length,
       parseTime,
       unparsedSections,
-      version: '1.0.0'
+      version: '2.0.0',
+      confidence
     }
   };
+}
+
+/**
+ * Calculate confidence score for game info extraction
+ * @param {Object} gameInfo - Game info object
+ * @returns {number} Confidence score 0-1
+ */
+function calculateGameInfoConfidence(gameInfo) {
+  let score = 0;
+  let count = 0;
+  
+  // Player count (high importance)
+  if (gameInfo.playerCount?.min && gameInfo.playerCount?.max) {
+    score += 0.9;
+  } else if (gameInfo.playerCount?.min || gameInfo.playerCount?.max) {
+    score += 0.5;
+  }
+  count++;
+  
+  // Age range
+  if (gameInfo.ageRange && gameInfo.ageRange !== 'Unknown') {
+    score += 0.7;
+  }
+  count++;
+  
+  // Play time
+  if (gameInfo.playTime?.min > 0 && gameInfo.playTime?.max < 999) {
+    score += 0.8;
+  } else if (gameInfo.playTime?.min > 0) {
+    score += 0.4;
+  }
+  count++;
+  
+  // Category
+  if (gameInfo.category && gameInfo.category !== 'Unknown') {
+    score += 0.6;
+  }
+  count++;
+  
+  // Game name
+  if (gameInfo.name && gameInfo.name !== 'Unknown Game') {
+    score += 0.8;
+  }
+  count++;
+  
+  return count > 0 ? score / count : 0;
 }
 
 /**
@@ -282,6 +398,7 @@ module.exports = {
   parseRules,
   preprocessText,
   validateRules,
+  validateInput,
   toMarkdown,
   GameCategory
 };
