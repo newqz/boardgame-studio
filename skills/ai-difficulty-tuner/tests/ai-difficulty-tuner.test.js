@@ -472,7 +472,15 @@ describe('Oscillation Prevention', () => {
   test('should prevent oscillation with rapid direction changes', () => {
     const tuner = new AdaptiveDifficultyTuner({
       thresholds: {
-        ...require('../src/adaptive-tuner').DEFAULT_THRESHOLDS,
+        WIN_STREAK_THRESHOLD: 3,
+        LOSS_STREAK_THRESHOLD: 3,
+        LOW_WIN_RATE: 0.25,
+        HIGH_WIN_RATE: 0.75,
+        TARGET_WIN_RATE_MIN: 0.40,
+        TARGET_WIN_RATE_MAX: 0.60,
+        MIN_GAMES_FOR_ADJUSTMENT: 3,
+        TREND_WINDOW: 5,
+        ADJUSTMENT_COOLDOWN: 3,
         OSCILLATION_THRESHOLD: 2,
         WIN_STREAK_THRESHOLD: 2,
         LOSS_STREAK_THRESHOLD: 2
@@ -504,7 +512,15 @@ describe('Oscillation Prevention', () => {
   test('should not trigger oscillation with consistent direction', () => {
     const tuner = new AdaptiveDifficultyTuner({
       thresholds: {
-        ...require('../src/adaptive-tuner').DEFAULT_THRESHOLDS,
+        WIN_STREAK_THRESHOLD: 3,
+        LOSS_STREAK_THRESHOLD: 3,
+        LOW_WIN_RATE: 0.25,
+        HIGH_WIN_RATE: 0.75,
+        TARGET_WIN_RATE_MIN: 0.40,
+        TARGET_WIN_RATE_MAX: 0.60,
+        MIN_GAMES_FOR_ADJUSTMENT: 3,
+        TREND_WINDOW: 5,
+        ADJUSTMENT_COOLDOWN: 3,
         OSCILLATION_THRESHOLD: 2
       }
     });
@@ -876,5 +892,158 @@ describe('Input Validation', () => {
     // String should default to 0
     const config = getFineTunedConfig('medium', 'high');
     expect(config).toBeDefined();
+  });
+});
+
+describe('Memory Management', () => {
+  test('should respect maxHistorySize limit', () => {
+    const tuner = new AdaptiveDifficultyTuner({ maxHistorySize: 10 });
+
+    // Add 20 games
+    for (let i = 0; i < 20; i++) {
+      tuner.recordResult('player1', { won: i % 2 === 0, turnQuality: 0.7 });
+    }
+
+    const data = tuner.gameResults.get('player1');
+    expect(data.length).toBeLessThanOrEqual(10);
+  });
+
+  test('should respect maxAdjustmentHistory limit', () => {
+    const tuner = new AdaptiveDifficultyTuner({
+      maxAdjustmentHistory: 5,
+      thresholds: {
+        WIN_STREAK_THRESHOLD: 1,
+        LOSS_STREAK_THRESHOLD: 1,
+        LOW_WIN_RATE: 0.25,
+        HIGH_WIN_RATE: 0.75,
+        TARGET_WIN_RATE_MIN: 0.40,
+        TARGET_WIN_RATE_MAX: 0.60,
+        MIN_GAMES_FOR_ADJUSTMENT: 1,
+        TREND_WINDOW: 3,
+        ADJUSTMENT_COOLDOWN: 1,
+        OSCILLATION_THRESHOLD: 3
+      }
+    });
+
+    // Trigger multiple adjustments
+    for (let i = 0; i < 10; i++) {
+      tuner.recordResult('player1', { won: true });
+      tuner.shouldAdjustDifficulty('player1');
+    }
+
+    expect(tuner.adjustmentHistory.length).toBeLessThanOrEqual(5);
+  });
+
+  test('should prune empty player data', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+
+    tuner.recordResult('player1', { won: true });
+    tuner.recordResult('player2', { won: false });
+
+    // Clear player1's data manually
+    tuner.gameResults.get('player1').length = 0;
+    tuner._pruneHistory();
+
+    // player1 should be cleaned up (no results and no difficulty set)
+    expect(tuner.gameResults.has('player1')).toBe(false);
+  });
+
+  test('should use configurable max sizes', () => {
+    const tuner = new AdaptiveDifficultyTuner({
+      maxHistorySize: 200,
+      maxAdjustmentHistory: 50,
+      maxMetricsHistory: 25
+    });
+
+    expect(tuner.maxHistorySize).toBe(200);
+    expect(tuner.maxAdjustmentHistory).toBe(50);
+    expect(tuner.maxMetricsHistory).toBe(25);
+  });
+});
+
+describe('Rate Limiting', () => {
+  test('should allow updates after interval passes', () => {
+    const tuner = new AdaptiveDifficultyTuner({ minUpdateInterval: 50 });
+
+    tuner.recordResult('player1', { won: true });
+
+    // Wait for interval
+    const start = Date.now();
+    while (Date.now() - start < 60) {
+      // busy wait
+    }
+
+    const result = tuner.recordResult('player1', { won: false });
+    expect(result).toBe(true);
+  });
+
+  test('canUpdate should respect rate limit', () => {
+    const tuner = new AdaptiveDifficultyTuner({ minUpdateInterval: 100 });
+
+    expect(tuner.canUpdate()).toBe(true);
+    expect(tuner.canUpdate()).toBe(false);
+
+    // Fast-forward time
+    tuner.rateLimiter.lastUpdate = Date.now() - 200;
+    expect(tuner.canUpdate()).toBe(true);
+  });
+});
+
+describe('Performance Benchmarks', () => {
+  test('should handle many players efficiently', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+
+    const start = Date.now();
+
+    // Create 100 players with 10 games each
+    for (let p = 0; p < 100; p++) {
+      for (let g = 0; g < 10; g++) {
+        tuner.recordResult(`player${p}`, { won: g % 2 === 0, turnQuality: 0.7 });
+      }
+    }
+
+    const duration = Date.now() - start;
+
+    // Should complete in reasonable time (< 500ms)
+    expect(duration).toBeLessThan(500);
+  });
+
+  test('should handle difficulty adjustments efficiently', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+
+    // Add some games
+    for (let i = 0; i < 10; i++) {
+      tuner.recordResult('player1', { won: true });
+    }
+
+    const start = Date.now();
+
+    // Many adjustment checks
+    for (let i = 0; i < 100; i++) {
+      tuner.shouldAdjustDifficulty('player1');
+    }
+
+    const duration = Date.now() - start;
+
+    // Should be fast (< 100ms)
+    expect(duration).toBeLessThan(100);
+  });
+
+  test('should handle getMetrics efficiently', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+
+    // Add data
+    for (let p = 0; p < 50; p++) {
+      for (let g = 0; g < 5; g++) {
+        tuner.recordResult(`player${p}`, { won: g % 2 === 0 });
+      }
+    }
+
+    const start = Date.now();
+    const metrics = tuner.getMetrics();
+    const duration = Date.now() - start;
+
+    expect(metrics.totalPlayersTracked).toBe(50);
+    expect(duration).toBeLessThan(50);  // Should be fast
   });
 });

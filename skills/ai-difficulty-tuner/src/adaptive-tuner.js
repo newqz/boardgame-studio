@@ -65,6 +65,12 @@ class AdaptiveDifficultyTuner {
   constructor(options = {}) {
     this.eloTracker = new PlayerEloTracker();
     this.thresholds = { ...DEFAULT_THRESHOLDS, ...options.thresholds };
+
+    // Memory management - configurable limits
+    this.maxHistorySize = options.maxHistorySize || 1000;  // Max games per player
+    this.maxAdjustmentHistory = options.maxAdjustmentHistory || 100;  // Max adjustment records
+    this.maxMetricsHistory = options.maxMetricsHistory || 100;  // Max metrics snapshots
+
     /** @type {Map<string, GameResult[]>} */
     this.gameResults = new Map();
     /** @type {Map<string, number>} */
@@ -92,6 +98,55 @@ class AdaptiveDifficultyTuner {
     };
     /** @type {Date|null} */
     this.lastUpdateTime = null;
+
+    // Rate limiting
+    this.rateLimiter = {
+      lastUpdate: 0,
+      minInterval: options.minUpdateInterval || 100  // Minimum ms between updates
+    };
+  }
+
+  /**
+   * Check if rate limit allows update
+   * @returns {boolean} True if update is allowed
+   */
+  canUpdate() {
+    const now = Date.now();
+    if (now - this.rateLimiter.lastUpdate < this.rateLimiter.minInterval) {
+      return false;
+    }
+    this.rateLimiter.lastUpdate = now;
+    return true;
+  }
+
+  /**
+   * Prune old entries from history arrays to prevent memory growth
+   * @private
+   */
+  _pruneHistory() {
+    // Prune adjustment history
+    while (this.adjustmentHistory.length > this.maxAdjustmentHistory) {
+      this.adjustmentHistory.shift();
+    }
+
+    // Prune metrics history
+    while (this.metricsHistory.length > this.maxMetricsHistory) {
+      this.metricsHistory.shift();
+    }
+
+    // Prune per-player game results
+    for (const [playerId, results] of this.gameResults) {
+      while (results.length > this.maxHistorySize) {
+        results.shift();
+      }
+      // Clean up empty player data
+      if (results.length === 0 && !this.currentDifficulty.has(playerId)) {
+        this.gameResults.delete(playerId);
+        this.adjustmentCooldown.delete(playerId);
+        this.lastAdjustmentDirection.delete(playerId);
+        this.adjustmentOscillation.delete(playerId);
+      }
+    }
   }
 
   /**
@@ -119,11 +174,17 @@ class AdaptiveDifficultyTuner {
    * @param {GameResult} result - Game result
    */
   recordResult(playerId, result) {
+    // Check rate limit
+    if (!this.canUpdate()) {
+      console.warn('Rate limit exceeded, skipping update');
+      return false;
+    }
+
     const data = this.getPlayerData(playerId);
     data.results.push(result);
 
-    // Keep only last 50 games
-    if (data.results.length > 50) {
+    // Use configurable max history size
+    while (data.results.length > this.maxHistorySize) {
       data.results.shift();
     }
 
@@ -136,6 +197,13 @@ class AdaptiveDifficultyTuner {
     if (this.adjustmentCooldown.has(playerId) && this.adjustmentCooldown.get(playerId) > 0) {
       this.adjustmentCooldown.set(playerId, this.adjustmentCooldown.get(playerId) - 1);
     }
+
+    // Periodic memory cleanup (every 10 updates)
+    if (this.stats.totalAdjustments % 10 === 0) {
+      this._pruneHistory();
+    }
+
+    return true;
   }
 
   /**
