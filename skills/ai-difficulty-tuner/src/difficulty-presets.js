@@ -218,6 +218,75 @@ function compareLevels(a, b) {
   return DifficultyRank[a] - DifficultyRank[b];
 }
 
+/**
+ * Interpolate between two difficulty configs
+ * @param {DifficultyConfig} configA - Base config
+ * @param {DifficultyConfig} configB - Target config
+ * @param {number} factor - Interpolation factor (0-1)
+ * @returns {DifficultyConfig} Interpolated config
+ */
+function interpolateConfigs(configA, configB, factor) {
+  const clampedFactor = Math.max(0, Math.min(1, factor));
+
+  return {
+    level: configA.level,
+    thinkTime: {
+      min: Math.round(configA.thinkTime.min + (configB.thinkTime.min - configA.thinkTime.min) * clampedFactor),
+      max: Math.round(configA.thinkTime.max + (configB.thinkTime.max - configA.thinkTime.max) * clampedFactor),
+      average: Math.round(configA.thinkTime.average + (configB.thinkTime.average - configA.thinkTime.average) * clampedFactor)
+    },
+    decisionParams: {
+      explorationRate: configA.decisionParams.explorationRate + (configB.decisionParams.explorationRate - configA.decisionParams.explorationRate) * clampedFactor,
+      randomActionRate: configA.decisionParams.randomActionRate + (configB.decisionParams.randomActionRate - configA.decisionParams.randomActionRate) * clampedFactor,
+      mistakeRate: configA.decisionParams.mistakeRate + (configB.decisionParams.mistakeRate - configA.decisionParams.mistakeRate) * clampedFactor,
+      blindSpotRate: configA.decisionParams.blindSpotRate + (configB.decisionParams.blindSpotRate - configA.decisionParams.blindSpotRate) * clampedFactor
+    },
+    capabilities: {
+      maxLookAhead: Math.round(configA.capabilities.maxLookAhead + (configB.capabilities.maxLookAhead - configA.capabilities.maxLookAhead) * clampedFactor),
+      memoryDepth: Math.round(configA.capabilities.memoryDepth + (configB.capabilities.memoryDepth - configA.capabilities.memoryDepth) * clampedFactor),
+      patternRecognition: clampedFactor > 0.5 ? configB.capabilities.patternRecognition : configA.capabilities.patternRecognition,
+      adaptToPlayer: clampedFactor > 0.5 ? configB.capabilities.adaptToPlayer : configA.capabilities.adaptToPlayer
+    }
+  };
+}
+
+/**
+ * Get interpolated difficulty config based on performance score
+ * @param {DifficultyLevel} level - Base difficulty level
+ * @param {number} performanceScore - Performance score (-1 to 1, negative=struggling, positive=dominant)
+ * @returns {DifficultyConfig} Fine-tuned config
+ */
+function getFineTunedConfig(level, performanceScore) {
+  const baseConfig = getPreset(level);
+  const clampedScore = Math.max(-1, Math.min(1, performanceScore));
+
+  // Performance score maps to interpolation factor
+  // -1 = use previous level config (or current if tutorial)
+  // 0 = use current level config
+  // +1 = use next level config (or current if unbeatable)
+
+  const factor = (clampedScore + 1) / 2; // Convert -1..1 to 0..1
+
+  // Find adjacent levels
+  const levels = getAllLevels();
+  const currentIndex = levels.indexOf(level);
+
+  let targetConfig;
+  if (clampedScore < 0 && currentIndex > 0) {
+    // Struggling: use easier level as target
+    targetConfig = getPreset(levels[currentIndex - 1]);
+  } else if (clampedScore > 0 && currentIndex < levels.length - 1) {
+    // Dominant: use harder level as target
+    targetConfig = getPreset(levels[currentIndex + 1]);
+  } else {
+    // At boundary or neutral - use current
+    return baseConfig;
+  }
+
+  // Interpolate between current and target
+  return interpolateConfigs(baseConfig, targetConfig, Math.abs(clampedScore));
+}
+
 module.exports = {
   DifficultyLevel,
   DifficultyRank,
@@ -225,5 +294,7 @@ module.exports = {
   getPreset,
   getAllLevels,
   isValidLevel,
-  compareLevels
+  compareLevels,
+  interpolateConfigs,
+  getFineTunedConfig
 };

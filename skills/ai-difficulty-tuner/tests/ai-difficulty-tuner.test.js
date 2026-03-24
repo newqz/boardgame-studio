@@ -411,8 +411,227 @@ describe('Integration', () => {
     // second half (3): [true, true, true] = 3/3 = 100%
     // diff = 50% > 15% → improving
     expect(analysis.metrics.trend).toBe('improving');
-    
+
     // Player rating should have increased from initial 1200
     expect(analysis.stats.rating).toBeGreaterThan(1200);
+  });
+});
+
+describe('Parameter Interpolation', () => {
+  const { interpolateConfigs, getFineTunedConfig, DifficultyLevel, getPreset } = require('../src/index');
+
+  test('should interpolate between two configs', () => {
+    const easy = getPreset(DifficultyLevel.EASY);
+    const medium = getPreset(DifficultyLevel.MEDIUM);
+
+    const interpolated = interpolateConfigs(easy, medium, 0.5);
+
+    expect(interpolated.level).toBe(DifficultyLevel.EASY); // Base level preserved
+    // Think time increases with difficulty
+    expect(interpolated.thinkTime.average).toBeGreaterThan(easy.thinkTime.average);
+    expect(interpolated.thinkTime.average).toBeLessThan(medium.thinkTime.average);
+    // Mistake rate decreases with difficulty (EASY=0.15, MEDIUM=0.03, interp=0.09)
+    expect(interpolated.decisionParams.mistakeRate).toBeLessThan(easy.decisionParams.mistakeRate);
+    expect(interpolated.decisionParams.mistakeRate).toBeGreaterThan(medium.decisionParams.mistakeRate);
+  });
+
+  test('should get fine-tuned config for struggling player', () => {
+    const config = getFineTunedConfig(DifficultyLevel.MEDIUM, -0.5);
+
+    // Should be between EASY and MEDIUM (easier side = higher mistake rate)
+    expect(config.decisionParams.mistakeRate).toBeGreaterThan(
+      getPreset(DifficultyLevel.MEDIUM).decisionParams.mistakeRate
+    );
+    expect(config.decisionParams.mistakeRate).toBeLessThan(
+      getPreset(DifficultyLevel.EASY).decisionParams.mistakeRate
+    );
+  });
+
+  test('should get fine-tuned config for dominant player', () => {
+    const config = getFineTunedConfig(DifficultyLevel.MEDIUM, 0.5);
+
+    // Should be between MEDIUM and HARD (harder side = lower mistake rate)
+    expect(config.decisionParams.mistakeRate).toBeLessThan(
+      getPreset(DifficultyLevel.MEDIUM).decisionParams.mistakeRate
+    );
+    expect(config.decisionParams.mistakeRate).toBeGreaterThan(
+      getPreset(DifficultyLevel.HARD).decisionParams.mistakeRate
+    );
+  });
+
+  test('should clamp performance score', () => {
+    const config1 = getFineTunedConfig(DifficultyLevel.MEDIUM, -2); // Clamped to -1
+    const config2 = getFineTunedConfig(DifficultyLevel.MEDIUM, 2);  // Clamped to 1
+
+    expect(config1).toEqual(getFineTunedConfig(DifficultyLevel.MEDIUM, -1));
+    expect(config2).toEqual(getFineTunedConfig(DifficultyLevel.MEDIUM, 1));
+  });
+});
+
+describe('Oscillation Prevention', () => {
+  test('should prevent oscillation with rapid direction changes', () => {
+    const tuner = new AdaptiveDifficultyTuner({
+      thresholds: {
+        ...require('../src/adaptive-tuner').DEFAULT_THRESHOLDS,
+        OSCILLATION_THRESHOLD: 2,
+        WIN_STREAK_THRESHOLD: 2,
+        LOSS_STREAK_THRESHOLD: 2
+      }
+    });
+
+    // First add enough game data to pass minimum threshold check
+    for (let i = 0; i < 5; i++) {
+      tuner.recordResult('player1', { won: true });
+    }
+
+    // Manually add adjustment history to simulate rapid switching
+    tuner.adjustmentHistory = [
+      { playerId: 'player1', direction: 'up', timestamp: Date.now() - 100 },
+      { playerId: 'player1', direction: 'down', timestamp: Date.now() - 50 },
+      { playerId: 'player1', direction: 'up', timestamp: Date.now() }
+    ];
+
+    // Check if oscillating (3 changes in history would exceed threshold)
+    // Note: isOscillating checks last TREND_WINDOW (5) items
+    expect(tuner.isOscillating('player1')).toBe(true);
+
+    // Should not adjust due to oscillation detection
+    const decision = tuner.shouldAdjustDifficulty('player1');
+    expect(decision.adjust).toBe(false);
+    expect(decision.reason).toContain('Oscillation');
+  });
+
+  test('should not trigger oscillation with consistent direction', () => {
+    const tuner = new AdaptiveDifficultyTuner({
+      thresholds: {
+        ...require('../src/adaptive-tuner').DEFAULT_THRESHOLDS,
+        OSCILLATION_THRESHOLD: 2
+      }
+    });
+
+    // Add enough game data
+    for (let i = 0; i < 5; i++) {
+      tuner.recordResult('player1', { won: true });
+    }
+
+    // Add consistent direction history
+    tuner.adjustmentHistory = [
+      { playerId: 'player1', direction: 'up', timestamp: Date.now() - 100 },
+      { playerId: 'player1', direction: 'up', timestamp: Date.now() - 50 },
+      { playerId: 'player1', direction: 'up', timestamp: Date.now() }
+    ];
+
+    expect(tuner.isOscillating('player1')).toBe(false);
+  });
+});
+
+describe('Cooldown and Gradual Recovery', () => {
+  test('should set cooldown after adjustment', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+
+    // Record winning streak to trigger adjustment
+    for (let i = 0; i < 5; i++) {
+      tuner.recordResult('player1', { won: true });
+    }
+
+    const decision = tuner.shouldAdjustDifficulty('player1');
+    if (decision.adjust) {
+      expect(tuner.adjustmentCooldown.get('player1')).toBe(3); // Default cooldown
+    }
+  });
+
+  test('should decrement cooldown on each game', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+
+    // Trigger adjustment
+    for (let i = 0; i < 5; i++) {
+      tuner.recordResult('player1', { won: true });
+    }
+    tuner.shouldAdjustDifficulty('player1');
+
+    const initialCooldown = tuner.adjustmentCooldown.get('player1');
+
+    // Play more games
+    tuner.recordResult('player1', { won: true });
+    tuner.recordResult('player1', { won: true });
+
+    expect(tuner.adjustmentCooldown.get('player1')).toBe(initialCooldown - 2);
+  });
+
+  test('should not adjust during cooldown', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+
+    // Trigger and apply adjustment
+    for (let i = 0; i < 5; i++) {
+      tuner.recordResult('player1', { won: true });
+    }
+    tuner.shouldAdjustDifficulty('player1');
+
+    // Cooldown should now be active - trying to adjust again should fail
+    const decision = tuner.shouldAdjustDifficulty('player1');
+    expect(decision.adjust).toBe(false);
+    expect(decision.reason).toContain('cooldown');
+  });
+
+  test('should apply fine-tuning during cooldown recovery', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+
+    // Trigger adjustment
+    for (let i = 0; i < 5; i++) {
+      tuner.recordResult('player1', { won: true, turnQuality: 0.9 });
+    }
+    tuner.shouldAdjustDifficulty('player1');
+
+    // Get config during cooldown
+    tuner.recordResult('player1', { won: true, turnQuality: 0.9 });
+    const config = tuner.getDifficultyConfig('player1');
+
+    // During cooldown with positive performance, should use fine-tuned (harder) config
+    expect(config.decisionParams.mistakeRate).toBeLessThanOrEqual(
+      getPreset(DifficultyLevel.MEDIUM).decisionParams.mistakeRate
+    );
+  });
+});
+
+describe('Performance Score', () => {
+  test('should calculate positive performance for winning player', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+
+    for (let i = 0; i < 5; i++) {
+      tuner.recordResult('player1', { won: true, turnQuality: 0.9 });
+    }
+
+    const metrics = tuner.analyzePerformance('player1');
+    expect(metrics.performanceScore).toBeGreaterThan(0);
+  });
+
+  test('should calculate negative performance for losing player', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+
+    for (let i = 0; i < 5; i++) {
+      tuner.recordResult('player1', { won: false, turnQuality: 0.3 });
+    }
+
+    const metrics = tuner.analyzePerformance('player1');
+    expect(metrics.performanceScore).toBeLessThan(0);
+  });
+
+  test('should factor in trend to performance score', () => {
+    const tuner = new AdaptiveDifficultyTuner();
+
+    // First half: losses, second half: wins (improving)
+    const games = [
+      { won: false }, { won: false }, { won: false },
+      { won: true }, { won: true }, { won: true }, { won: true }
+    ];
+
+    for (const game of games) {
+      tuner.recordResult('player1', game);
+    }
+
+    const metrics = tuner.analyzePerformance('player1');
+    // Win rate is ~57% (4/7), trend is improving, so score should be positive
+    expect(metrics.performanceScore).toBeGreaterThan(0);
+    expect(metrics.trend).toBe('improving');
   });
 });

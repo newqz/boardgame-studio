@@ -1,7 +1,7 @@
 /**
  * AI Difficulty Tuner - Main Export
- * 
- * @version 1.0.0
+ *
+ * @version 2.0.0
  */
 
 'use strict';
@@ -25,5 +25,5 @@ module.exports = {
   PlayerStyleAnalyzer,
 
   // Version info
-  VERSION: '1.0.0'
+  VERSION: '2.0.0'
 };

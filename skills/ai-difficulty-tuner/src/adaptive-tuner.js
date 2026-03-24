@@ -1,13 +1,13 @@
 /**
  * Adaptive Difficulty Tuner
  * Analyzes player performance and adjusts AI difficulty dynamically
- * 
- * @version 1.0.0
+ *
+ * @version 2.0.0 - Enhanced with oscillation prevention and gradual recovery
  */
 
 'use strict';
 
-const { DifficultyLevel, DifficultyRank, getPreset, compareLevels } = require('./difficulty-presets');
+const { DifficultyLevel, DifficultyRank, getPreset, getFineTunedConfig, compareLevels } = require('./difficulty-presets');
 const { PlayerEloTracker } = require('./elo-tracker');
 
 /**
@@ -21,6 +21,7 @@ const { PlayerEloTracker } = require('./elo-tracker');
  * @property {number} mistakesPerGame - Average mistakes per game
  * @property {PerformanceTrend} trend - Performance trend
  * @property {number} gamesPlayed - Number of games analyzed
+ * @property {number} performanceScore - Computed performance score (-1 to 1)
  */
 
 /**
@@ -51,7 +52,9 @@ const DEFAULT_THRESHOLDS = Object.freeze({
   TARGET_WIN_RATE_MIN: 0.40,    // Target win rate range minimum
   TARGET_WIN_RATE_MAX: 0.60,    // Target win rate range maximum
   MIN_GAMES_FOR_ADJUSTMENT: 3,  // Minimum games before adjustment
-  TREND_WINDOW: 5               // Games to analyze for trend
+  TREND_WINDOW: 5,              // Games to analyze for trend
+  ADJUSTMENT_COOLDOWN: 3,       // Games to wait after adjustment
+  OSCILLATION_THRESHOLD: 2      // Max direction changes in window to prevent oscillation
 });
 
 class AdaptiveDifficultyTuner {
@@ -68,6 +71,12 @@ class AdaptiveDifficultyTuner {
     this.currentDifficulty = new Map();
     /** @type {Object[]} */
     this.adjustmentHistory = [];
+    /** @type {Map<string, number>} */
+    this.adjustmentCooldown = new Map();      // Games remaining before next adjustment
+    /** @type {Map<string, number>} */
+    this.lastAdjustmentDirection = new Map();   // Track last adjustment direction for oscillation
+    /** @type {Map<string, {direction: string, count: number}[]>} */
+    this.adjustmentOscillation = new Map();    // Track oscillation patterns
   }
 
   /**
@@ -107,6 +116,11 @@ class AdaptiveDifficultyTuner {
     const aiRating = 1200;
     const actualScore = result.won ? 1 : 0;
     this.eloTracker.updateRating(playerId, aiRating, actualScore);
+
+    // Decrement cooldown if active
+    if (this.adjustmentCooldown.has(playerId) && this.adjustmentCooldown.get(playerId) > 0) {
+      this.adjustmentCooldown.set(playerId, this.adjustmentCooldown.get(playerId) - 1);
+    }
   }
 
   /**
@@ -126,7 +140,8 @@ class AdaptiveDifficultyTuner {
         avgTurnQuality: 0.5,
         mistakesPerGame: 0,
         trend: 'stable',
-        gamesPlayed: 0
+        gamesPlayed: 0,
+        performanceScore: 0
       };
     }
 
@@ -138,12 +153,20 @@ class AdaptiveDifficultyTuner {
     // Calculate trend
     const trend = this.calculateTrend(recentResults);
 
+    // Calculate performance score (-1 to 1)
+    // Based on win rate relative to target (50%) and trend
+    const targetWinRate = 0.5;
+    const winRateDeviation = winRate - targetWinRate;
+    const trendBonus = trend === 'improving' ? 0.1 : trend === 'declining' ? -0.1 : 0;
+    const performanceScore = Math.max(-1, Math.min(1, winRateDeviation * 2 + trendBonus));
+
     return {
       winRate,
       avgTurnQuality,
       mistakesPerGame: avgMistakes,
       trend,
-      gamesPlayed: recentResults.length
+      gamesPlayed: recentResults.length,
+      performanceScore
     };
   }
 
@@ -190,6 +213,16 @@ class AdaptiveDifficultyTuner {
       return { adjust: false, direction: 'none', magnitude: 0, reason: 'Insufficient game data' };
     }
 
+    // Check cooldown - if locked, don't adjust
+    if (this.adjustmentCooldown.has(playerId) && this.adjustmentCooldown.get(playerId) > 0) {
+      return { adjust: false, direction: 'none', magnitude: 0, reason: 'Difficulty adjustment on cooldown' };
+    }
+
+    // Check for oscillation pattern
+    if (this.isOscillating(playerId)) {
+      return { adjust: false, direction: 'none', magnitude: 0, reason: 'Oscillation detected - difficulty locked' };
+    }
+
     // Check for consecutive patterns
     const recentResults = data.results.slice(-this.thresholds.TREND_WINDOW);
     const winStreak = this.countConsecutiveStreak(recentResults, true);
@@ -197,6 +230,7 @@ class AdaptiveDifficultyTuner {
 
     // Player on a winning streak and winning too much
     if (winStreak >= this.thresholds.WIN_STREAK_THRESHOLD && winRate > this.thresholds.HIGH_WIN_RATE) {
+      this.recordAdjustmentDirection(playerId, 'up');
       return {
         adjust: true,
         direction: 'up',
@@ -207,6 +241,7 @@ class AdaptiveDifficultyTuner {
 
     // Player on a losing streak and losing too much
     if (lossStreak >= this.thresholds.LOSS_STREAK_THRESHOLD && winRate < this.thresholds.LOW_WIN_RATE) {
+      this.recordAdjustmentDirection(playerId, 'down');
       return {
         adjust: true,
         direction: 'down',
@@ -217,6 +252,7 @@ class AdaptiveDifficultyTuner {
 
     // Win rate too low for extended period
     if (winRate < this.thresholds.LOW_WIN_RATE && trend === 'declining') {
+      this.recordAdjustmentDirection(playerId, 'down');
       return {
         adjust: true,
         direction: 'down',
@@ -227,6 +263,7 @@ class AdaptiveDifficultyTuner {
 
     // Win rate too high for extended period
     if (winRate > this.thresholds.HIGH_WIN_RATE && trend === 'improving') {
+      this.recordAdjustmentDirection(playerId, 'up');
       return {
         adjust: true,
         direction: 'up',
@@ -241,6 +278,49 @@ class AdaptiveDifficultyTuner {
     }
 
     return { adjust: false, direction: 'none', magnitude: 0, reason: 'No significant imbalance detected' };
+  }
+
+  /**
+   * Check if difficulty is oscillating (rapid up/down switches)
+   * @param {string} playerId - Player identifier
+   * @returns {boolean} True if oscillating
+   */
+  isOscillating(playerId) {
+    const recent = this.adjustmentHistory.slice(-this.thresholds.TREND_WINDOW);
+    if (recent.length < 3) return false;
+
+    // Count direction changes
+    let changes = 0;
+    for (let i = 1; i < recent.length; i++) {
+      if (recent[i].direction !== recent[i - 1].direction) {
+        changes++;
+      }
+    }
+
+    return changes >= this.thresholds.OSCILLATION_THRESHOLD;
+  }
+
+  /**
+   * Record adjustment direction for oscillation tracking
+   * @param {string} playerId - Player identifier
+   * @param {string} direction - 'up' or 'down'
+   */
+  recordAdjustmentDirection(playerId, direction) {
+    // Record in history
+    this.adjustmentHistory.push({
+      playerId,
+      direction,
+      timestamp: Date.now()
+    });
+
+    // Keep only last 20 adjustments
+    if (this.adjustmentHistory.length > 20) {
+      this.adjustmentHistory.shift();
+    }
+
+    // Set cooldown
+    this.adjustmentCooldown.set(playerId, this.thresholds.ADJUSTMENT_COOLDOWN);
+    this.lastAdjustmentDirection.set(playerId, direction);
   }
 
   /**
@@ -329,11 +409,31 @@ class AdaptiveDifficultyTuner {
   /**
    * Get difficulty config for a player
    * @param {string} playerId - Player identifier
+   * @param {boolean} [useFineTuning=true] - Whether to apply fine-tuning based on performance
    * @returns {Object} Full difficulty configuration
    */
-  getDifficultyConfig(playerId) {
+  getDifficultyConfig(playerId, useFineTuning = true) {
     const level = this.getCurrentDifficulty(playerId);
-    return getPreset(level);
+
+    if (!useFineTuning) {
+      return getPreset(level);
+    }
+
+    // Apply fine-tuning based on recent performance
+    const metrics = this.analyzePerformance(playerId);
+
+    // If in cooldown, use slightly more conservative settings
+    const cooldownActive = this.adjustmentCooldown.has(playerId) && this.adjustmentCooldown.get(playerId) > 0;
+
+    if (cooldownActive && metrics.performanceScore !== 0) {
+      // During cooldown, gradually return to base level
+      const cooldownRatio = this.adjustmentCooldown.get(playerId) / this.thresholds.ADJUSTMENT_COOLDOWN;
+      const adjustedScore = metrics.performanceScore * cooldownRatio;
+      return getFineTunedConfig(level, adjustedScore);
+    }
+
+    // Normal operation - use performance-based fine-tuning
+    return getFineTunedConfig(level, metrics.performanceScore);
   }
 
   /**
