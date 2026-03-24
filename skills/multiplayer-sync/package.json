@@ -1,0 +1,26 @@
+{
+  "name": "multiplayer-sync",
+  "version": "1.0.0",
+  "description": "多人游戏同步技能 - Lockstep同步、状态同步、断线重连、反作弊、观众系统",
+  "main": "src/index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "jest"
+  },
+  "keywords": [
+    "multiplayer",
+    "sync",
+    "lockstep",
+    "reconnection",
+    "anticheat",
+    "spectator"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
