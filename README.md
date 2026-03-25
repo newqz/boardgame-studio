@@ -1,6 +1,8 @@
 # 🎮 Board Game Studio
 
 > 桌游电子化软件工厂 — 将实体桌游高效转换为在线版本
+>
+> 🌍 [English version](README-en.md) | 中文版
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js Version](https://img.shields.io/badge/node-%20≥18.0-brightgreen)](package.json)
