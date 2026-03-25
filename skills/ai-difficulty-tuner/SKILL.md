@@ -1,3 +1,12 @@
+---
+name: ai-difficulty-tuner
+description: "AI 难度动态调优技能 — 调整 AI 对手难度以匹配玩家水平。Use when: 需要动态调整AI难度、匹配玩家水平、分析玩家表现。NOT for: 非AI难度调整。"
+metadata:
+  {
+    "openclaw": { "emoji": "🎯", "requires": {} }
+  }
+---
+
 # Skill: ai-difficulty-tuner
 
 > AI 难度动态调优技能 — 调整 AI 对手难度以匹配玩家水平

@@ -1,3 +1,12 @@
+---
+name: multiplayer-sync
+description: "多人游戏同步技能 — 设计多人在线桌游的实时同步架构。Use when: 需要实现多人在线功能、解决同步问题、选择同步策略、实现观战/录像功能。NOT for: 单人游戏。"
+metadata:
+  {
+    "openclaw": { "emoji": "👥", "requires": {} }
+  }
+---
+
 # Skill: multiplayer-sync
 
 > 多人游戏同步技能 — 设计多人在线桌游的实时同步架构

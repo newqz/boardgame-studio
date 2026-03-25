@@ -1,3 +1,12 @@
+---
+name: test-case-generator
+description: "测试用例生成技能 — 为桌游电子化项目生成全面的测试用例。Use when: 需要生成测试用例、补充回归测试、验证游戏逻辑。NOT for: 非桌游测试。"
+metadata:
+  {
+    "openclaw": { "emoji": "🧪", "requires": {} }
+  }
+---
+
 # Skill: test-case-generator
 
 > 测试用例生成技能 — 为桌游电子化项目生成全面的测试用例

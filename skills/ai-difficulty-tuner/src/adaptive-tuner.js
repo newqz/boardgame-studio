@@ -102,7 +102,7 @@ class AdaptiveDifficultyTuner {
     // Rate limiting
     this.rateLimiter = {
       lastUpdate: 0,
-      minInterval: options.minUpdateInterval || 100  // Minimum ms between updates
+      minInterval: options.minUpdateInterval ?? 100  // Minimum ms between updates
     };
   }
 

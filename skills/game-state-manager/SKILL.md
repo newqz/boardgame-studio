@@ -1,3 +1,12 @@
+---
+name: game-state-manager
+description: "游戏状态管理技能 — 序列化和恢复游戏状态。Use when: 需要保存/恢复游戏状态、管理游戏快照、同步游戏状态。NOT for: 非游戏相关的状态管理。"
+metadata:
+  {
+    "openclaw": { "emoji": "🎮", "requires": {} }
+  }
+---
+
 # Skill: game-state-manager
 
 > 游戏状态管理技能 — 序列化和恢复游戏状态

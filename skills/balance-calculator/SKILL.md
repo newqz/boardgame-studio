@@ -1,3 +1,12 @@
+---
+name: balance-calculator
+description: "游戏平衡性计算技能 — 评估游戏机制和数值的平衡性。Use when: 需要分析游戏平衡性、调整AI难度、优化资源产出/消耗、检测必胜策略。NOT for: 非游戏平衡性分析。"
+metadata:
+  {
+    "openclaw": { "emoji": "⚖️", "requires": {} }
+  }
+---
+
 # Skill: balance-calculator
 
 > 游戏平衡性计算技能 — 评估游戏机制和数值的平衡性

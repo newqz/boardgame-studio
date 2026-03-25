@@ -1,3 +1,12 @@
+---
+name: game-rules-parser
+description: "桌游规则解析技能 — 将自然语言规则文档转化为结构化数据。Use when: 需要解析桌游规则、提取游戏参数、分析游戏机制。NOT for: 非桌游内容解析。"
+metadata:
+  {
+    "openclaw": { "emoji": "📋", "requires": {} }
+  }
+---
+
 # Skill: game-rules-parser
 
 > 桌游规则解析技能 — 将自然语言规则文档转化为结构化数据

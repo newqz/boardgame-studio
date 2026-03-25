@@ -1,251 +1,264 @@
-# 🎮 Board Game Studio - Agent Team
+# 🎮 Board Game Studio
 
-> 桌游电子化软件工厂 AI Agent 团队
+> 桌游电子化软件工厂 — 将实体桌游高效转换为在线版本
 
-## 团队概览
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node.js Version](https://img.shields.io/badge/node-%20≥18.0-brightgreen)](package.json)
 
-**任务**: 将各种桌游高效地转换为在线版本
+## 什么是 Board Game Studio？
 
-**Agent数量**: 16个专业角色
+Board Game Studio 是一个 **AI Agent 团队**，由 16 个专业角色组成，负责将实体桌游（如卡坦岛、UNO、七大奇迹等）转换为可在线运行的软件。
 
----
-
-## 团队架构
-
-```
-🎯 项目总监 (Project Director)
-   │
-   ├── 📋 规则分析团队
-   │   ├── rule-analyst.md - 规则解析专家
-   │   ├── mechanic-extractor.md - 玩法提炼专家
-   │   ├── balance-evaluator.md - 平衡性评估专家
-   │   └── test-generator.md - 测试生成专家
-   │
-   ├── 🎨 设计前端团队
-   │   ├── ui-designer.md - UI架构师
-   │   ├── interaction-designer.md - UX交互设计专家
-   │   ├── visual-designer.md - 视觉设计师
-   │   └── animation-effects.md - 动画特效专家
-   │
-   ├── ⚙️ 后端游戏团队
-   │   ├── game-engine-dev.md - 游戏引擎开发
-   │   ├── multiplayer-architect.md - 多人架构专家
-   │   ├── ai-opponent-dev.md - AI对手开发
-   │   ├── social-features-dev.md - 社交功能开发
-   │   └── data-engineer.md - 数据工程师
-   │
-   └── 🔧 测试运维团队
-       ├── qa-engineer.md - QA工程师
-       ├── automation-qa.md - 自动化QA工程师
-       └── devops-engineer.md - DevOps工程师
-```
+团队成员包括：规则解析专家、平衡性评估专家、UI 设计师、游戏引擎开发者、多人架构师、AI 对手工程师、QA 工程师等，覆盖从规则分析到游戏上线的完整流程。
 
 ---
 
-## 核心文档 (P0 生产就绪)
+## ✨ 核心特性
 
-| 文档 | 用途 | 大小 | 状态 |
-|------|------|------|------|
-| `SOUL.md` | 团队宪章、价值观、工作流程 | 5.4KB | ✅ |
-| `PROTOCOLS.md` | Agent 交接协议 v3（反向流控+人类审核）、冲突解决 | 18KB | ✅ |
-| `META-MODEL.md` | **桌游元模型 DSL、复杂度分级、运行时架构、随机性模型** | 28KB | ✅ |
-| `EXAMPLES.md` | **卡坦岛+UNO+神秘大地端到端案例** | 25KB | ✅ |
-| `QUALITY.md` | **质量门禁 vs 运营监控分离** | 10KB | ✅ |
-| `AGENT-MODEL-MAPPING.md` | **Agent-Model 显式绑定矩阵** | 16KB | ✅ |
-| `OBSERVABILITY.md` | **Trace架构、决策日志、Dashboard、告警、Top10指标** | 24KB | ✅ P0 |
-| `RULES-ENGINE.md` | **权威规则验证层、FEN格式、防作弊、超时默认拒绝** | 20KB | ✅ P0 |
-| `RESILIENCE.md` | **Agent降级/熔断模型、故障恢复、负荷管理** | 19KB | ✅ |
-| `CONCURRENCY.md` | **并发模型、一致性边界、锁策略、负荷卸载** | 11KB | ✅ P0 |
+- **规则解析** — 自动从文字规则提取游戏机制、结构化数据
+- **平衡性计算** — 蒙特卡洛模拟、胜率分析、策略均衡检测
+- **多人同步** — 支持 Lockstep、Client-Prediction 等多种同步架构
+- **状态管理** — 序列化、回放、断线重连
+- **测试生成** — 自动生成单元/集成/E2E 测试用例
+- **AI 对手** — 动态难度调整、自适应学习
 
 ---
 
-## 工作流程
+## 🛠️ Skills 技能库
 
+项目包含 6 个可独立使用的技能包：
+
+| 技能 | 说明 | 优先级 |
+|------|------|--------|
+| [game-rules-parser](skills/game-rules-parser/) | 解析桌游规则文档为结构化数据 | P0 |
+| [balance-calculator](skills/balance-calculator/) | 计算和评估游戏平衡性 | P0 |
+| [test-case-generator](skills/test-case-generator/) | 生成测试用例和测试数据 | P0 |
+| [multiplayer-sync](skills/multiplayer-sync/) | 多人游戏实时同步架构 | P0 |
+| [game-state-manager](skills/game-state-manager/) | 游戏状态序列化和恢复 | P1 |
+| [ai-difficulty-tuner](skills/ai-difficulty-tuner/) | AI 难度动态调整 | P1 |
+
+每个技能目录包含：
+- `SKILL.md` — 技能定义和使用说明
+- `src/` — 核心实现代码
+- `tests/` — 测试用例
+- `package.json` — 依赖配置
+
+---
+
+## 📦 安装
+
+### 前提条件
+
+- **Node.js** ≥ 18.0
+- **npm** ≥ 9.0
+
+### 克隆项目
+
+```bash
+git clone https://github.com/<your-username>/boardgame-studio.git
+cd boardgame-studio
 ```
-桌游输入
-    │
-    ▼
-┌─────────────────┐
-│  规则分析团队   │ ← 解析规则、提炼机制、评估平衡
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  项目总监       │ ← 规划任务、协调团队
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    ▼         ▼
-┌────────┐ ┌────────┐
-│设计前端│ │后端游戏│
-│ 团队   │ │  团队   │
-└───┬────┘ └───┬────┘
-    │         │
-    └────┬────┘
-         ▼
-┌─────────────────┐
-│  测试运维团队   │ ← 自动化测试、部署、监控
-└────────┬────────┘
-         │
-         ▼
-    游戏上线
+
+### 安装依赖
+
+```bash
+# 安装所有 skills 的依赖
+cd skills/game-rules-parser && npm install && cd ../..
+cd skills/balance-calculator && npm install && cd ../..
+cd skills/test-case-generator && npm install && cd ../..
+cd skills/multiplayer-sync && npm install && cd ../..
+cd skills/game-state-manager && npm install && cd ../..
+cd skills/ai-difficulty-tuner && npm install && cd ../..
+
+# 或使用脚本一键安装
+bash scripts/install-all.sh
+```
+
+### 快速安装（所有 skills）
+
+```bash
+for dir in skills/*/; do
+  if [ -f "$dir/package.json" ]; then
+    echo "Installing $(basename "$dir")..."
+    npm install --prefix "$dir"
+  fi
+done
 ```
 
 ---
 
-## 复杂度分级系统
+## 🚀 快速开始
 
-```yaml
-Tier 1 (简单):
-  - UNO、接力快手
-  - 预计工时: 20-40h
-  - Agent配置: 简化
-  
-Tier 2 (中等):
-  - 卡坦岛、七大奇迹
-  - 预计工时: 80-120h
-  - Agent配置: 标准
-  
-Tier 3 (复杂):
-  - 神秘大地、农场主
-  - 预计工时: 200-400h
-  - Agent配置: 增强
-  
-Tier 4 (专家):
-  - 黑暗降临、Gloomhaven
-  - 预计工时: 600h+
-  - Agent配置: 全配
+### 1. 解析桌游规则
+
+```javascript
+const { RuleParser } = require('./skills/game-rules-parser/src/index');
+
+const parser = new RuleParser();
+const result = await parser.parseFromFile('./rules/catan.md');
+
+console.log(result.gameInfo);
+// { name: '卡坦岛', playerCount: { min: 3, max: 4 }, ... }
+```
+
+### 2. 计算平衡性
+
+```javascript
+const { BalanceCalculator } = require('./skills/balance-calculator/src/index');
+
+const calculator = new BalanceCalculator();
+const report = await calculator.analyze({
+  resources: ['wood', 'brick', 'sheep', 'wheat', 'ore'],
+  productionRate: { wood: 0.2, brick: 0.2, ... },
+  victoryPoints: 10
+});
+
+console.log(report.overallScore); // 0-100
+```
+
+### 3. 多人同步
+
+```javascript
+const { LockstepSynchronizer } = require('./skills/multiplayer-sync/src/index');
+
+const sync = new LockstepSynchronizer({ playerCount: 4 });
+sync.on('turn_executed', (data) => broadcastToPlayers(data));
+sync.submitInput('player1', { type: 'roll_dice' });
+```
+
+### 4. 状态管理
+
+```javascript
+const { GameStateManager } = require('./skills/game-state-manager/src/index');
+
+const manager = new GameStateManager();
+manager.createGame('room-001', initialState);
+const snapshot = manager.createSnapshot(state, 'Turn 5');
+const delta = manager.diff(stateA, stateB);
+```
+
+### 5. 生成测试用例
+
+```javascript
+const { TestGenerator } = require('./skills/test-case-generator/src/index');
+
+const generator = new TestGenerator();
+const cases = generator.generateFromRules(parsedRules, {
+  coverage: 'full',
+  types: ['unit', 'boundary', 'integration']
+});
+
+console.log(cases); // 测试用例数组
 ```
 
 ---
 
-## 技术栈参考
+## 🧪 运行测试
 
-### 前端
-- React + TypeScript / Phaser 3
-- CSS3 + Animation
-- WebSocket for real-time
+```bash
+# 单个 skill 测试
+cd skills/game-state-manager
+npm test
 
-### 后端
-- Node.js + Colyseus
-- PostgreSQL + Redis
-- WebSocket (Socket.io)
+# 所有 skill 测试
+npm test --workspaces --if-present
 
-### 基础设施
-- Kubernetes
-- Docker
-- Prometheus + Grafana
-- GitHub Actions
-
-### AI
-- Minimax/MiniMax-M2.7-highspeed
-- Game tree search (Minimax, MCTS)
+# 带覆盖率
+npm run test:coverage --workspaces --if-present
+```
 
 ---
 
-## 技能库 (Skills)
-
-| 技能 | 用途 | 优先级 |
-|------|------|-------|
-| `skills/game-rules-parser/` | 规则文档解析 | P0 |
-| `skills/balance-calculator/` | 平衡性计算 | P0 |
-| `skills/test-case-generator/` | 测试用例生成 | P0 |
-| `skills/multiplayer-sync/` | 多人同步架构 | P0 |
-| `skills/game-state-manager/` | 状态序列化/回放 | P1 |
-| `skills/ai-difficulty-tuner/` | AI难度动态调整 | P1 |
-
-详见 [skills/README.md](skills/README.md)
-
----
-
-## 框架结构
+## 📁 项目结构
 
 ```
 boardgame-studio/
-├── SOUL.md                    # 团队灵魂宪章
-├── README.md                  # 本文件
-├── PROTOCOLS.md               # Agent交接协议标准 (v3)
-├── META-MODEL.md              # 桌游元模型 DSL (v1.2)
-├── EXAMPLES.md                # 端到端案例
-├── QUALITY.md                 # 质量度量标准
-├── AGENT-MODEL-MAPPING.md    # Agent-Model绑定矩阵
-├── OBSERVABILITY.md          # 可观测性框架 (含日志回放协议) ⭐第四轮新增
+├── README.md               # 本文件
+├── SOUL.md                 # 团队宪章
+├── PROTOCOLS.md            # Agent 交接协议
+├── META-MODEL.md           # 桌游元模型 DSL
+├── EXAMPLES.md             # 端到端案例
+├── AGENT-MODEL-MAPPING.md # Agent-Model 绑定
 │
-├── project-director.md        # 项目总监（含错误处理、Human-in-loop）
-├── rule-analyst.md            # 规则解析专家
-├── mechanic-extractor.md      # 玩法提炼专家
-├── balance-evaluator.md      # 平衡性评估专家
-├── test-generator.md          # 测试生成专家
-├── ui-designer.md            # UI架构师
-├── interaction-designer.md    # UX交互设计专家
-├── visual-designer.md        # 视觉设计师
-├── game-engine-dev.md        # 游戏引擎开发
-├── multiplayer-architect.md  # 多人架构专家
-├── ai-opponent-dev.md        # AI对手开发
-├── social-features-dev.md     # 社交功能开发
-├── animation-effects.md       # 动画特效专家
-├── data-engineer.md          # 数据工程师
-├── qa-engineer.md           # QA工程师
-├── automation-qa.md         # 自动化QA工程师
-└── devops-engineer.md       # DevOps工程师
-    │
-    └── skills/              # 技能库
-        ├── README.md
-        ├── PROTOCOLS.md
-        ├── game-rules-parser/
-        ├── balance-calculator/
-        ├── test-case-generator/
-        ├── multiplayer-sync/
-        ├── game-state-manager/
-        └── ai-difficulty-tuner/
+├── *.md                    # Agent 角色定义 (16个)
+│
+├── skills/                 # 技能库
+│   ├── game-rules-parser/  # P0 - 规则解析
+│   ├── balance-calculator/ # P0 - 平衡计算
+│   ├── test-case-generator/ # P0 - 测试生成
+│   ├── multiplayer-sync/   # P0 - 多人同步
+│   ├── game-state-manager/ # P1 - 状态管理
+│   └── ai-difficulty-tuner/ # P1 - 难度调整
+│
+├── backend/                # 后端代码（开发中）
+├── frontend/               # 前端代码（开发中）
+├── src/                    # 共享源代码（开发中）
+├── tests/                  # 集成测试（开发中）
+├── design/                 # 设计稿（开发中）
+├── devops/                 # CI/CD 配置（开发中）
+└── docs/                   # 文档
 ```
 
 ---
 
-## 优化记录
+## 🎯 复杂度分级
 
-### 第一轮优化 (18:00-18:17)
-- ✅ PROTOCOLS.md — 标准化交接协议
-- ✅ game-state-manager skill — 状态序列化
-- ✅ ai-difficulty-tuner skill — AI难度调整
-- ✅ project-director 增加错误处理、Human-in-loop
-
-### 第二轮优化 (18:20-18:30) — 基于 Opus 4.6 评审
-- ✅ META-MODEL.md — 桌游元模型 DSL
-- ✅ EXAMPLES.md — 卡坦岛端到端完整案例
-- ✅ QUALITY.md — 质量度量标准体系
-
-### 第三轮优化 (18:30-18:45) — 基于 Opus 4.6 第二轮评审
-- ✅ AGENT-MODEL-MAPPING.md — Agent与元模型的显式绑定矩阵 (16KB)
-- ✅ META-MODEL.md 新增 RUNTIME 章节 — 游戏状态机、同步策略、验证回滚
-- ✅ EXAMPLES.md 新增 UNO + 神秘大地骨架 — 验证跨Tier复用率
-- ✅ PROTOCOLS.md v2 — 增加反向流控、版本控制、拒绝协议
-- ✅ QUALITY.md v2 — 拆分质量门禁(pre) vs 运营监控(post)
-
-### 第四轮优化 (18:45-19:00) — 基于 Opus 4.6 第三轮评审
-- ✅ OBSERVABILITY.md — Trace架构、决策日志、Dashboard、告警体系 (16KB)
-- ✅ META-MODEL.md 新增随机性模型 — RandomnessSource/Seed管理/多人同步/AI处理
-- ✅ PROTOCOLS.md v3 — 增加人类审核节点、升级工单Schema、SLA、知识库反馈循环
-
-### 第五轮优化 (18:48-19:05) — 基于 Opus 4.6 第四轮评审
-- ✅ RULES-ENGINE.md — 权威规则验证层、FEN游戏状态格式、防作弊验证 (14KB)
-- ✅ RESILIENCE.md — Agent降级/熔断模型、故障恢复、负荷管理 (19KB)
-- ✅ OBSERVABILITY.md v1.1 — 新增日志回放协议 (fork/反事实模拟支持)
-
-### 第六轮优化 (18:58-19:10) — P0 生产必选修复
-- ✅ RULES-ENGINE.md v1.1 — 新增验证超时+默认拒绝行为 (3.0节)
-- ✅ OBSERVABILITY.md v1.2 — 新增运行时指标规范 Top10 + 告警阈值配置 (7.0节)
-- ✅ CONCURRENCY.md — 新增并发模型、一致性边界、死锁预防 (11KB)
-- **状态**: P0 问题已全部修复
+| 级别 | 示例游戏 | 预计工时 | Agent 配置 |
+|------|---------|---------|-----------|
+| Tier 1 | UNO、接力快手 | 20-40h | 简化 |
+| Tier 2 | 卡坦岛、七大奇迹 | 80-120h | 标准 |
+| Tier 3 | 神秘大地、农场主 | 200-400h | 增强 |
+| Tier 4 | 黑暗降临、Gloomhaven | 600h+ | 全配 |
 
 ---
 
-## 下一步
+## 🏗️ 技术栈
 
-1. **实例部署**: 在 OpenClaw boardgame 实例 (port 18809) 上部署团队
-2. **实际测试**: 选择一款桌游（如卡坦岛）进行端到端测试
-3. **迭代优化**: 根据实际运行结果优化 Agent 配置
+| 层级 | 技术 |
+|------|------|
+| 前端 | React + TypeScript / Phaser 3 |
+| 后端 | Node.js + Colyseus |
+| 数据库 | PostgreSQL + Redis |
+| 实时通信 | WebSocket (Socket.io) |
+| 部署 | Docker + Kubernetes |
+| 监控 | Prometheus + Grafana |
+| AI | Game Tree Search (Minimax, MCTS) |
 
 ---
 
-*最后更新: 2026-03-24*
+## 📚 相关文档
+
+| 文档 | 说明 |
+|------|------|
+| [SOUL.md](SOUL.md) | 团队价值观和工作流程 |
+| [PROTOCOLS.md](PROTOCOLS.md) | Agent 交接协议 v3 |
+| [META-MODEL.md](META-MODEL.md) | 桌游元模型 DSL |
+| [EXAMPLES.md](EXAMPLES.md) | 卡坦岛+UNO+神秘大地案例 |
+| [OBSERVABILITY.md](OBSERVABILITY.md) | 可观测性框架 |
+| [RULES-ENGINE.md](RULES-ENGINE.md) | 规则验证层 |
+| [RESILIENCE.md](RESILIENCE.md) | 容错和降级模型 |
+| [CONCURRENCY.md](CONCURRENCY.md) | 并发控制 |
+
+---
+
+## 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/amazing`)
+3. 提交更改 (`git commit -m 'Add amazing feature'`)
+4. 推送到分支 (`git push origin feature/amazing`)
+5. 创建 Pull Request
+
+详见 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
+
+---
+
+## 📄 许可证
+
+本项目基于 MIT 许可证开源 — 详见 [LICENSE](LICENSE)
+
+---
+
+*最后更新: 2026-03-25*
