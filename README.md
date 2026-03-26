@@ -228,6 +228,16 @@ boardgame-studio/
 
 ---
 
+## 🎮 参考实现
+
+本项目团队使用 boardgame-studio 技术栈开发了以下在线游戏：
+
+| 游戏 | 技术栈 | 说明 |
+|------|--------|------|
+| [poker-server-modern](https://github.com/newqz/poker-server-modern) | Node.js + Socket.io + PostgreSQL | 德州扑克服务器，支持实时多人对战、筹码交易原子性、游戏状态过滤 |
+
+---
+
 ## 📚 相关文档
 
 | 文档 | 说明 |
